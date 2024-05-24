@@ -46,6 +46,7 @@ export interface ServiceEnvelope {
 
 export interface PacketGroup {
   id: number;
+  time: Date;
   rxTime: number;
   serviceEnvelopes: ServiceEnvelope[];
 }
@@ -70,6 +71,7 @@ class MeshPacketQueue {
     if (grouptIndex === -1) {
       this.queue.push({
         id: serviceEnvelope.packet.id,
+        time: new Date(),
         rxTime: serviceEnvelope.packet.rxTime,
         serviceEnvelopes: [serviceEnvelope],
       });
@@ -78,12 +80,12 @@ class MeshPacketQueue {
     }
   }
 
-  popPacketGroupsOlderThan(rxTime: number): PacketGroup[] {
+  popPacketGroupsOlderThan(time: number): PacketGroup[] {
     const packetGroups = this.queue.filter(
-      (packetGroup) => packetGroup.rxTime * 1000 < rxTime,
+      (packetGroup) => packetGroup.time.getTime() < time,
     );
     this.queue = this.queue.filter(
-      (packetGroup) => packetGroup.rxTime * 1000 >= rxTime,
+      (packetGroup) => packetGroup.time.getTime() >= time,
     );
     return packetGroups;
   }
