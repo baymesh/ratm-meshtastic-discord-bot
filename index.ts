@@ -135,7 +135,7 @@ function processTextMessage(packetGroup: PacketGroup) {
 
               if (
                 envelope.gatewayId === "!75f1804c" ||
-                envelope.gatewayId === "!75f1804d"
+                envelope.gatewayId === "!3b46b95c"
               ) {
                 console.log(envelope);
               }
