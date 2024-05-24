@@ -124,7 +124,6 @@ function processTextMessage(packetGroup: PacketGroup) {
             inline: true,
           },
           ...packetGroup.serviceEnvelopes
-            // .map((envelope) => envelope.gatewayId)
             .filter(
               (value, index, self) =>
                 self.findIndex((t) => t.gatewayId === value.gatewayId) ===
@@ -168,7 +167,7 @@ const client = mqtt.connect(mqttBrokerUrl, {
 // run every 5 seconds and pop off from the queue
 setInterval(() => {
   const packetGroups = meshPacketQueue.popPacketGroupsOlderThan(
-    Date.now() - 10000,
+    Date.now() - 15000,
   );
   packetGroups.forEach((packetGroup) => {
     processPacketGroup(packetGroup);
@@ -193,10 +192,8 @@ client.on("connect", () => {
   });
 });
 
-// let foo = 0;
 // handle message received
 client.on("message", async (topic: string, message: any) => {
-  // console.log(foo++, topic);
   try {
     if (topic.includes(mesh_topic)) {
       if (!topic.includes("/json")) {
