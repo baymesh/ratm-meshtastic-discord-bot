@@ -132,6 +132,14 @@ function processTextMessage(packetGroup: PacketGroup) {
             .map((envelope) => {
               const gatewayDelay =
                 envelope.mqttTime.getTime() - packetGroup.time.getTime();
+
+              if (
+                envelope.gatewayId === "!75f1804c" ||
+                envelope.gatewayId === "!75f1804d"
+              ) {
+                console.log(envelope);
+              }
+
               return {
                 name: "Gateway",
                 value: `${prettyNodeName(envelope.gatewayId.replace("!", ""))} (${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops)${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
