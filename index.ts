@@ -169,7 +169,7 @@ const client = mqtt.connect(mqttBrokerUrl, {
 // run every 5 seconds and pop off from the queue
 setInterval(() => {
   const packetGroups = meshPacketQueue.popPacketGroupsOlderThan(
-    Date.now() - 7500,
+    Date.now() - 10000,
   );
   packetGroups.forEach((packetGroup) => {
     processPacketGroup(packetGroup);
