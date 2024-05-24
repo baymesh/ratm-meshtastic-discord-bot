@@ -121,7 +121,7 @@ function processTextMessage(packetGroup: PacketGroup) {
           {
             name: "Node ID",
             value: `${nodeIdHex}`,
-            inline: true,
+            // inline: true,
           },
           ...packetGroup.serviceEnvelopes
             .filter(
