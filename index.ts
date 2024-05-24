@@ -45,7 +45,7 @@ const nodeId2hex = (nodeId: string | number) => {
 const prettyNodeName = (nodeId: string | number) => {
   const nodeIdHex = nodeId2hex(nodeId);
   const nodeName = getNodeName(nodeId);
-  return nodeName ? `${nodeIdHex} (${nodeName})` : nodeIdHex;
+  return nodeName ? `${nodeIdHex} - ${nodeName}` : nodeIdHex;
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -130,9 +130,11 @@ function processTextMessage(packetGroup: PacketGroup) {
                 index,
             )
             .map((envelope) => {
+              const gatewayDelay =
+                envelope.mqttTime.getTime() - packetGroup.time.getTime();
               return {
                 name: "Gateway",
-                value: `${prettyNodeName(envelope.gatewayId.replace("!", ""))} (${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart})`,
+                value: `${prettyNodeName(envelope.gatewayId.replace("!", ""))} (${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops)${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
                 inline: true,
               };
             }),
@@ -141,7 +143,7 @@ function processTextMessage(packetGroup: PacketGroup) {
     ],
   };
 
-  console.log(packetGroup, packetGroup.serviceEnvelopes);
+  //console.log(packetGroup, packetGroup.serviceEnvelopes);
 
   if (isInIgnoreDB(from)) {
     console.log(
