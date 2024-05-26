@@ -66,6 +66,8 @@ if (!process.env.DISCORD_WEBHOOK_URL) {
 }
 
 const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+const mesh_topic = process.env.MQTT_TOPIC || "msh/US/bayarea";
+const grouping_duration = parseInt(process.env.GROUPING_DURATION || "10000");
 
 function sendDiscordMessage(payload: any) {
   const data = typeof payload === "string" ? { content: payload } : payload;
@@ -163,8 +165,17 @@ function processTextMessage(packetGroup: PacketGroup) {
     console.log(
       `${new Date().toUTCString()} [info] Received message from ${prettyNodeName(from)} to ${prettyNodeName(to)} : ${text}`,
     );
-    if (to === "ffffffff") {
-      sendDiscordMessage(content);
+    // ignore packets older than 5 minutes
+    if (new Date(packet.rxTime * 1000) < new Date(Date.now() - 5 * 60 * 1000)) {
+      console.log(
+        `${new Date().toUTCString()} [info] Ignoring old message from ${prettyNodeName(
+          from,
+        )} to ${prettyNodeName(to)} : ${text}`,
+      );
+    } else {
+      if (to === "ffffffff") {
+        sendDiscordMessage(content);
+      }
     }
   }
 }
@@ -177,14 +188,12 @@ const client = mqtt.connect(mqttBrokerUrl, {
 // run every 5 seconds and pop off from the queue
 setInterval(() => {
   const packetGroups = meshPacketQueue.popPacketGroupsOlderThan(
-    Date.now() - 10000,
+    Date.now() - grouping_duration,
   );
   packetGroups.forEach((packetGroup) => {
     processPacketGroup(packetGroup);
   });
 }, 5000);
-
-const mesh_topic = "msh/US/bayarea";
 
 // subscribe to everything when connected
 client.on("connect", () => {
