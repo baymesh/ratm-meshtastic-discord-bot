@@ -230,8 +230,8 @@ function sub(topic: string) {
 client.on("connect", () => {
   console.log(`${new Date().toUTCString()} [info] connected to mqtt broker`);
   sub("msh/US/bayarea");
-  sub("msh/US/CA/CentralValley");
-  sub("msh/US/CA/sacvalley");
+  sub("msh/US/CA/CentralValley"); // msh/US/CA/CentralValley
+  sub("msh/US/CA/sacvalley"); // msh/US/CA/sacvalley
   sub("msh/US/CA/CenValMesh");
   sub("msh/US/CA/BayArea");
 });
@@ -239,7 +239,7 @@ client.on("connect", () => {
 // handle message received
 client.on("message", async (topic: string, message: any) => {
   try {
-    if (topic.includes(mesh_topic)) {
+    if (topic.includes("msh")) {
       if (!topic.includes("/json")) {
         if (topic.includes("/stat/")) {
           return;
@@ -300,20 +300,37 @@ function processPacketGroup(packetGroup: PacketGroup) {
     );
     const from = packet.from.toString(16);
 
-    console.log("POSITION_APP", {
-      from: prettyNodeName(from),
-      position: position.latitudeI + "," + position.longitudeI,
-      topics: Array.from(
+    // console.log("POSITION_APP", {
+    //   from: prettyNodeName(from),
+    //   position: position.latitudeI + "," + position.longitudeI,
+    //   topics: Array.from(
+    //     new Set(
+    //       packetGroup.serviceEnvelopes.map((envelope) =>
+    //         envelope.topic.slice(0, envelope.topic.indexOf("/!")),
+    //       ),
+    //     ),
+    //   ),
+    //   gatewayIds: packetGroup.serviceEnvelopes.map(
+    //     (envelope) => envelope.gatewayId,
+    //   ),
+    // });
+
+    console.log(
+      "POSITION_APP: ",
+      prettyNodeName(from),
+      " ; ",
+      position.latitudeI / 10000000 + "," + position.longitudeI / 10000000,
+      " ; ",
+      Array.from(
         new Set(
           packetGroup.serviceEnvelopes.map((envelope) =>
             envelope.topic.slice(0, envelope.topic.indexOf("/!")),
           ),
         ),
       ),
-      gatewayIds: packetGroup.serviceEnvelopes.map(
-        (envelope) => envelope.gatewayId,
-      ),
-    });
+      " ; ",
+      packetGroup.serviceEnvelopes.map((envelope) => envelope.gatewayId),
+    );
 
     // createDiscordMessage(packetGroup, JSON.stringify(position));
   } else if (portnum === 4) {
