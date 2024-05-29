@@ -59,6 +59,7 @@ root.loadSync("meshtastic/mqtt.proto");
 const Data = root.lookupType("Data");
 const ServiceEnvelope = root.lookupType("ServiceEnvelope");
 const User = root.lookupType("User");
+const Position = root.lookupType("Position");
 
 if (!process.env.DISCORD_WEBHOOK_URL) {
   console.error("DISCORD_WEBHOOK_URL not set");
@@ -86,9 +87,14 @@ function sendDiscordMessage(payload: any) {
 
 function processTextMessage(packetGroup: PacketGroup) {
   const packet = packetGroup.serviceEnvelopes[0].packet;
+  const text = packet.decoded.payload.toString();
+  createDiscordMessage(packetGroup, text);
+}
+
+function createDiscordMessage(packetGroup, text) {
+  const packet = packetGroup.serviceEnvelopes[0].packet;
   const to = packet.to.toString(16);
   const from = packet.from.toString(16);
-  const text = packet.decoded.payload.toString();
 
   // discard text messages in the form of "seq 6034" "seq 6025"
   if (text.match(/^seq \d+$/)) {
@@ -173,8 +179,19 @@ function processTextMessage(packetGroup: PacketGroup) {
         )} to ${prettyNodeName(to)} : ${text}`,
       );
     } else {
-      if (to === "ffffffff") {
-        sendDiscordMessage(content);
+      if (to == "ffffffff") {
+        if (
+          packetGroup.serviceEnvelopes.filter(
+            (envelope) => envelope.topic.indexOf("msh/US/bayarea/") !== -1,
+          ).length > 0
+        ) {
+          sendDiscordMessage(content);
+        } else {
+          console.log(
+            "no packets found in topic:",
+            packetGroup.serviceEnvelopes.map((envelope) => envelope.topic),
+          );
+        }
       }
     }
   }
@@ -195,13 +212,11 @@ setInterval(() => {
   });
 }, 5000);
 
-// subscribe to everything when connected
-client.on("connect", () => {
-  console.log(`${new Date().toUTCString()} [info] connected to mqtt broker`);
-  client.subscribe(`${mesh_topic}/#`, (err) => {
+function sub(topic: string) {
+  client.subscribe(`${topic}/#`, (err) => {
     if (!err) {
       console.log(
-        `${new Date().toUTCString()} [info] subscribed to ${mesh_topic}/#`,
+        `${new Date().toUTCString()} [info] subscribed to ${topic}/#`,
       );
     } else {
       console.error(
@@ -209,6 +224,16 @@ client.on("connect", () => {
       );
     }
   });
+}
+
+// subscribe to everything when connected
+client.on("connect", () => {
+  console.log(`${new Date().toUTCString()} [info] connected to mqtt broker`);
+  sub("msh/US/bayarea");
+  sub("msh/US/CA/CentralValley");
+  sub("msh/US/CA/sacvalley");
+  sub("msh/US/CA/CenValMesh");
+  sub("msh/US/CA/BayArea");
 });
 
 // handle message received
@@ -249,7 +274,7 @@ client.on("message", async (topic: string, message: any) => {
           console.log(JSON.stringify(nodeDB));
         }
 
-        meshPacketQueue.add(envelope);
+        meshPacketQueue.add(envelope, topic);
       }
     }
   } catch (err) {
@@ -269,6 +294,28 @@ function processPacketGroup(packetGroup: PacketGroup) {
 
   if (portnum === 1) {
     processTextMessage(packetGroup);
+  } else if (portnum === 3) {
+    const position = Position.decode(
+      packetGroup.serviceEnvelopes[0].packet.decoded.payload,
+    );
+    const from = packet.from.toString(16);
+
+    console.log("POSITION_APP", {
+      from: prettyNodeName(from),
+      position: position.latitudeI + "," + position.longitudeI,
+      topics: Array.from(
+        new Set(
+          packetGroup.serviceEnvelopes.map((envelope) =>
+            envelope.topic.slice(0, envelope.topic.indexOf("/!")),
+          ),
+        ),
+      ),
+      gatewayIds: packetGroup.serviceEnvelopes.map(
+        (envelope) => envelope.gatewayId,
+      ),
+    });
+
+    // createDiscordMessage(packetGroup, JSON.stringify(position));
   } else if (portnum === 4) {
     const user = User.decode(packet.decoded.payload);
     const from = packet.from.toString(16);

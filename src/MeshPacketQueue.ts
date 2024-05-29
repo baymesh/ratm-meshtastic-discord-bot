@@ -43,6 +43,7 @@ export interface ServiceEnvelope {
   mqttTime: Date;
   channelId: string;
   gatewayId: string;
+  topic: string;
 }
 
 export interface PacketGroup {
@@ -67,8 +68,9 @@ class MeshPacketQueue {
     return this.queue.findIndex((packetGroup) => packetGroup.id === packetId);
   }
 
-  add(serviceEnvelope: ServiceEnvelope) {
+  add(serviceEnvelope: ServiceEnvelope, topic: string) {
     serviceEnvelope.mqttTime = new Date();
+    serviceEnvelope.topic = topic;
     const grouptIndex = this.getIndex(serviceEnvelope.packet.id);
     if (grouptIndex === -1) {
       this.queue.push({
