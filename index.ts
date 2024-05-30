@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import path from "path";
 import mqtt from "mqtt";
+import postgres from "postgres";
 import protobufjs from "protobufjs";
 import fs from "fs";
 import axios from "axios";
@@ -8,10 +9,68 @@ import { fileURLToPath } from "url";
 import { dirname } from "path";
 import FifoKeyCache from "./src/FifoKeyCache";
 import MeshPacketQueue, { PacketGroup } from "./src/MeshPacketQueue";
+import * as Sentry from "@sentry/node";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
+import { createClient } from "redis";
+
+// generate a pseduo uuid kinda thing to use as an instance id
+const INSTANCE_ID = (() => {
+  return crypto.randomBytes(4).toString("hex");
+})();
+
+const logger = {
+  info: (message: string) => {
+    console.log(
+      `${new Date().toISOString()} [${INSTANCE_ID}] [INFO] ${message}`,
+    );
+  },
+  error: (message: string) => {
+    console.log(
+      `${new Date().toISOString()} [${INSTANCE_ID}] [ERROR] ${message}`,
+    );
+  },
+  debug: (message: string) => {
+    console.log(
+      `${new Date().toISOString()} [${INSTANCE_ID}] [DEBUG] ${message}`,
+    );
+  },
+};
+
+Sentry.init({
+  environment: process.env.ENVIRONMENT || "development",
+  integrations: [nodeProfilingIntegration()],
+  // Performance Monitoring
+  tracesSampleRate: 1.0, //  Capture 100% of the transactions
+
+  // Set sampling rate for profiling - this is relative to tracesSampleRate
+  profilesSampleRate: 1.0,
+});
+
+Sentry.setTag("instance_id", INSTANCE_ID);
+
+logger.info(`Starting Rage Against Mesh(ine) ${INSTANCE_ID}`);
 
 const mqttBrokerUrl = "mqtt://mqtt.meshtastic.org";
 const mqttUsername = "meshdev";
 const mqttPassword = "large4cats";
+
+const sql = postgres(
+  process.env.DATABASE_URL,
+  {},
+);
+
+const redisClient = createClient({
+  url: process.env.REDIS_URL,
+});
+
+(async () => {
+  if (process.env.REDIS_ENABLED === "true") {
+    // Connect to redis server
+    await redisClient.connect();
+    logger.info(`Setting active instance id to ${INSTANCE_ID}`);
+    redisClient.set(`baymesh:active`, INSTANCE_ID);
+  }
+})();
 
 const decryptionKeys = [
   "1PG7OiApB1nwvP+rz05pAQ==", // add default "AQ==" decryption key
@@ -24,6 +83,9 @@ const meshPacketQueue = new MeshPacketQueue();
 
 const updateNodeDB = (node: string, longName: string) => {
   nodeDB[node] = longName;
+  if (process.env.REDIS_ENABLED === "true") {
+    redisClient.set(`baymesh:node:${node}`, longName);
+  }
   fs.writeFileSync(
     path.join(__dirname, "./nodeDB.json"),
     JSON.stringify(nodeDB, null, 2),
@@ -62,7 +124,7 @@ const User = root.lookupType("User");
 const Position = root.lookupType("Position");
 
 if (!process.env.DISCORD_WEBHOOK_URL) {
-  console.error("DISCORD_WEBHOOK_URL not set");
+  logger.error("DISCORD_WEBHOOK_URL not set");
   process.exit(-1);
 }
 
@@ -79,11 +141,22 @@ function sendDiscordMessage(payload: any) {
       // console.log("Message sent successfully");
     })
     .catch((error) => {
-      console.error(
-        `${new Date().toUTCString()} [error] Could not send discord message: ${error.response.status}`,
+      logger.error(
+        `[error] Could not send discord message: ${error.response.status}`,
       );
     });
 }
+
+Object.keys(nodeDB).forEach((nodeId) => {
+  if (process.env.REDIS_ENABLED === "true") {
+    const longName = nodeDB[nodeId];
+    redisClient.exists(`baymesh:node:${nodeId}`).then((exists) => {
+      if (!exists) {
+        redisClient.set(`baymesh:node:${nodeId}`, longName);
+      }
+    });
+  }
+});
 
 function processTextMessage(packetGroup: PacketGroup) {
   const packet = packetGroup.serviceEnvelopes[0].packet;
@@ -162,19 +235,19 @@ function createDiscordMessage(packetGroup, text) {
   //console.log(packetGroup, packetGroup.serviceEnvelopes);
 
   if (isInIgnoreDB(from)) {
-    console.log(
-      `${new Date().toUTCString()} [info] Ignoring message from ${prettyNodeName(
+    logger.info(
+      `Ignoring message from ${prettyNodeName(
         from,
       )} to ${prettyNodeName(to)} : ${text}`,
     );
   } else {
-    console.log(
-      `${new Date().toUTCString()} [info] Received message from ${prettyNodeName(from)} to ${prettyNodeName(to)} : ${text}`,
+    logger.info(
+      `Received message from ${prettyNodeName(from)} to ${prettyNodeName(to)} : ${text}`,
     );
     // ignore packets older than 5 minutes
     if (new Date(packet.rxTime * 1000) < new Date(Date.now() - 5 * 60 * 1000)) {
-      console.log(
-        `${new Date().toUTCString()} [info] Ignoring old message from ${prettyNodeName(
+      logger.info(
+        `Ignoring old message from ${prettyNodeName(
           from,
         )} to ${prettyNodeName(to)} : ${text}`,
       );
@@ -187,9 +260,8 @@ function createDiscordMessage(packetGroup, text) {
         ) {
           sendDiscordMessage(content);
         } else {
-          console.log(
-            "no packets found in topic:",
-            packetGroup.serviceEnvelopes.map((envelope) => envelope.topic),
+          logger.info(
+            `No packets found in topic: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
           );
         }
       }
@@ -197,13 +269,75 @@ function createDiscordMessage(packetGroup, text) {
   }
 }
 
+async function insertMeshPositionReport(packetGroup: PacketGroup) {
+  const packet = packetGroup.serviceEnvelopes[0].packet;
+  const from = packet.from;
+  const position = Position.decode(
+    packetGroup.serviceEnvelopes[0].packet.decoded.payload,
+  );
+
+  const latitude = position.latitudeI / 10000000;
+  const longitude = position.longitudeI / 10000000;
+  const altitude = position.altitude;
+
+  const topics = Array.from(
+    new Set(
+      packetGroup.serviceEnvelopes.map((envelope) =>
+        envelope.topic.slice(0, envelope.topic.indexOf("/!")),
+      ),
+    ),
+  );
+
+  const gateways = packetGroup.serviceEnvelopes.map((envelope) =>
+    envelope.gatewayId.replace("!", ""),
+  );
+
+  const result = await sql`
+    INSERT INTO mesh_position_reports
+    ("from", "from_hex", latitude, longitude, altitude, topics, gateways)
+    values
+      (${from}, ${nodeId2hex(from)}, ${latitude}, ${longitude}, ${altitude}, ${topics}, ${gateways})
+  `;
+  return result;
+}
+
 const client = mqtt.connect(mqttBrokerUrl, {
   username: mqttUsername,
   password: mqttPassword,
 });
 
+const topics = [
+  "msh/US/bayarea",
+  "msh/US/BayArea",
+  "msh/US/CA/bayarea",
+  "msh/US/CA/BayArea",
+  "msh/US/sacvalley",
+  "msh/US/SacValley",
+  "msh/US/CA/sacvalley",
+  "msh/US/CA/SacValley",
+  "msh/US/CA/CenValMesh",
+  "msh/US/CA/cenvalmesh",
+  "msh/US/CA/centralvalley",
+  "msh/US/CA/CentralValley",
+  "msh/US/CenValMesh",
+  "msh/US/cenvalmesh",
+  "msh/US/centralvalley",
+  "msh/US/CentralValley",
+];
+
 // run every 5 seconds and pop off from the queue
-setInterval(() => {
+const processing_timer = setInterval(() => {
+  if (process.env.REDIS_ENABLED === "true") {
+    redisClient.get(`baymesh:active`).then((active_instance) => {
+      if (active_instance && active_instance !== INSTANCE_ID) {
+        logger.error(
+          `Stopping RATM instance; active_instance: ${active_instance} this instance: ${INSTANCE_ID}`,
+        );
+        clearInterval(processing_timer); // do we want to kill it so fast? what about things in the queue?
+        topics.forEach((topic) => client.unsubscribe(topic));
+      }
+    });
+  }
   const packetGroups = meshPacketQueue.popPacketGroupsOlderThan(
     Date.now() - grouping_duration,
   );
@@ -215,25 +349,36 @@ setInterval(() => {
 function sub(topic: string) {
   client.subscribe(`${topic}/#`, (err) => {
     if (!err) {
-      console.log(
-        `${new Date().toUTCString()} [info] subscribed to ${topic}/#`,
-      );
+      logger.info(`Subscribed to ${topic}/#`);
     } else {
-      console.error(
-        `${new Date().toUTCString()} [error] subscription error: ${err.message}`,
-      );
+      logger.error(`Subscription error: ${err.message}`);
     }
   });
 }
 
+/*
+sub("msh/US/bayarea");
+sub("msh/US/BayArea");
+sub("msh/US/CA/bayarea");
+sub("msh/US/CA/BayArea");
+sub("msh/US/sacvalley");
+sub("msh/US/SacValley");
+sub("msh/US/CA/sacvalley");
+sub("msh/US/CA/SacValley");
+sub("msh/US/CA/CenValMesh");
+sub("msh/US/CA/cenvalmesh");
+sub("msh/US/CA/centralvalley");
+sub("msh/US/CA/CentralValley");
+sub("msh/US/CenValMesh");
+sub("msh/US/cenvalmesh");
+sub("msh/US/centralvalley");
+sub("msh/US/CentralValley");
+*/
+
 // subscribe to everything when connected
 client.on("connect", () => {
-  console.log(`${new Date().toUTCString()} [info] connected to mqtt broker`);
-  sub("msh/US/bayarea");
-  sub("msh/US/CA/CentralValley"); // msh/US/CA/CentralValley
-  sub("msh/US/CA/sacvalley"); // msh/US/CA/sacvalley
-  sub("msh/US/CA/CenValMesh");
-  sub("msh/US/CA/BayArea");
+  logger.info(`Connected to MQTT broker`);
+  topics.forEach((topic) => sub(topic));
 });
 
 // handle message received
@@ -260,11 +405,8 @@ client.on("message", async (topic: string, message: any) => {
         }
 
         if (cache.exists(shaHash(envelope))) {
-          console.log(
-            "FifoCache: Already received envelope with hash",
-            shaHash(envelope),
-            " Gateway: ",
-            envelope.gatewayId,
+          logger.debug(
+            `FifoCache: Already received envelope with hash ${shaHash(envelope)}  Gateway: ${envelope.gatewayId}`,
           );
           return;
         }
@@ -278,7 +420,7 @@ client.on("message", async (topic: string, message: any) => {
       }
     }
   } catch (err) {
-    console.log(err);
+    logger.error(String(err));
   }
 });
 
@@ -295,44 +437,9 @@ function processPacketGroup(packetGroup: PacketGroup) {
   if (portnum === 1) {
     processTextMessage(packetGroup);
   } else if (portnum === 3) {
-    const position = Position.decode(
-      packetGroup.serviceEnvelopes[0].packet.decoded.payload,
-    );
-    const from = packet.from.toString(16);
-
-    // console.log("POSITION_APP", {
-    //   from: prettyNodeName(from),
-    //   position: position.latitudeI + "," + position.longitudeI,
-    //   topics: Array.from(
-    //     new Set(
-    //       packetGroup.serviceEnvelopes.map((envelope) =>
-    //         envelope.topic.slice(0, envelope.topic.indexOf("/!")),
-    //       ),
-    //     ),
-    //   ),
-    //   gatewayIds: packetGroup.serviceEnvelopes.map(
-    //     (envelope) => envelope.gatewayId,
-    //   ),
-    // });
-
-    console.log(
-      "POSITION_APP: ",
-      prettyNodeName(from),
-      " ; ",
-      position.latitudeI / 10000000 + "," + position.longitudeI / 10000000,
-      " ; ",
-      Array.from(
-        new Set(
-          packetGroup.serviceEnvelopes.map((envelope) =>
-            envelope.topic.slice(0, envelope.topic.indexOf("/!")),
-          ),
-        ),
-      ),
-      " ; ",
-      packetGroup.serviceEnvelopes.map((envelope) => envelope.gatewayId),
-    );
-
-    // createDiscordMessage(packetGroup, JSON.stringify(position));
+    if (process.env.DB_INSERTS_ENABLED === "true") {
+      insertMeshPositionReport(packetGroup);
+    }
   } else if (portnum === 4) {
     const user = User.decode(packet.decoded.payload);
     const from = packet.from.toString(16);
