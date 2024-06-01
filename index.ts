@@ -54,10 +54,7 @@ const mqttBrokerUrl = "mqtt://mqtt.meshtastic.org";
 const mqttUsername = "meshdev";
 const mqttPassword = "large4cats";
 
-const sql = postgres(
-  process.env.DATABASE_URL,
-  {},
-);
+const sql = postgres(process.env.DATABASE_URL, {});
 
 const redisClient = createClient({
   url: process.env.REDIS_URL,
@@ -196,7 +193,7 @@ function createDiscordMessage(packetGroup, text) {
         },
         fields: [
           {
-            name: "Message",
+            name: `Message (${packetGroup.id})`,
             value: text,
           },
           {
