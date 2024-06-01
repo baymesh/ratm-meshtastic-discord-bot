@@ -193,7 +193,7 @@ function createDiscordMessage(packetGroup, text) {
         },
         fields: [
           {
-            name: `Message (${packetGroup.id})`,
+            name: `Message (${packetGroup.id.toString(16)})`,
             value: text,
           },
           {
