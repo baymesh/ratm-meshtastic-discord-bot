@@ -233,18 +233,18 @@ function createDiscordMessage(packetGroup, text) {
 
   if (isInIgnoreDB(from)) {
     logger.info(
-      `Ignoring message from ${prettyNodeName(
+      `MessageId: ${packetGroup.id} Ignoring message from ${prettyNodeName(
         from,
       )} to ${prettyNodeName(to)} : ${text}`,
     );
   } else {
     logger.info(
-      `Received message from ${prettyNodeName(from)} to ${prettyNodeName(to)} : ${text}`,
+      `MessageId: ${packetGroup.id} Received message from ${prettyNodeName(from)} to ${prettyNodeName(to)} : ${text}`,
     );
     // ignore packets older than 5 minutes
     if (new Date(packet.rxTime * 1000) < new Date(Date.now() - 5 * 60 * 1000)) {
       logger.info(
-        `Ignoring old message from ${prettyNodeName(
+        `MessageId: ${packetGroup.id} Ignoring old message from ${prettyNodeName(
           from,
         )} to ${prettyNodeName(to)} : ${text}`,
       );
@@ -258,7 +258,7 @@ function createDiscordMessage(packetGroup, text) {
           sendDiscordMessage(content);
         } else {
           logger.info(
-            `No packets found in topic: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
+            `MessageId: ${packetGroup.id} No packets found in topic: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
           );
         }
       }
@@ -289,13 +289,19 @@ async function insertMeshPositionReport(packetGroup: PacketGroup) {
     envelope.gatewayId.replace("!", ""),
   );
 
-  const result = await sql`
-    INSERT INTO mesh_position_reports
-    ("from", "from_hex", latitude, longitude, altitude, topics, gateways)
-    values
-      (${from}, ${nodeId2hex(from)}, ${latitude}, ${longitude}, ${altitude}, ${topics}, ${gateways})
-  `;
-  return result;
+  try {
+    return await sql`
+      INSERT INTO mesh_position_reports
+      ("from", "from_hex", latitude, longitude, altitude, topics, gateways)
+      values
+        (${from}, ${nodeId2hex(from)}, ${latitude}, ${longitude}, ${altitude}, ${topics}, ${gateways})
+    `;
+  } catch (error) {
+    logger.error(
+      `MessageId: ${packetGroup.id} Error inserting mesh position report: ${error}`,
+    );
+  }
+  return null;
 }
 
 const client = mqtt.connect(mqttBrokerUrl, {
@@ -403,7 +409,7 @@ client.on("message", async (topic: string, message: any) => {
 
         if (cache.exists(shaHash(envelope))) {
           logger.debug(
-            `FifoCache: Already received envelope with hash ${shaHash(envelope)}  Gateway: ${envelope.gatewayId}`,
+            `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
           );
           return;
         }
