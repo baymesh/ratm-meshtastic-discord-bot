@@ -18,21 +18,21 @@ const INSTANCE_ID = (() => {
   return crypto.randomBytes(4).toString("hex");
 })();
 
+function loggerDateString() {
+  return process.env.ENVIRONMENT === "production"
+    ? ""
+    : new Date().toISOString() + " ";
+}
+
 const logger = {
   info: (message: string) => {
-    console.log(
-      `${new Date().toISOString()} [${INSTANCE_ID}] [INFO] ${message}`,
-    );
+    console.log(`${loggerDateString()}[${INSTANCE_ID}] [INFO] ${message}`);
   },
   error: (message: string) => {
-    console.log(
-      `${new Date().toISOString()} [${INSTANCE_ID}] [ERROR] ${message}`,
-    );
+    console.log(`${loggerDateString()}[${INSTANCE_ID}] [ERROR] ${message}`);
   },
   debug: (message: string) => {
-    console.log(
-      `${new Date().toISOString()} [${INSTANCE_ID}] [DEBUG] ${message}`,
-    );
+    console.log(`${loggerDateString()}[${INSTANCE_ID}] [DEBUG] ${message}`);
   },
 };
 
@@ -267,7 +267,7 @@ function createDiscordMessage(packetGroup, text) {
 }
 
 async function insertMeshPositionReport(packetGroup: PacketGroup) {
-  Sentry.withScope((scope) => {
+  Sentry.withScope(async (scope) => {
     scope.setTag("packet_id", packetGroup.id);
     scope.setTag("packet_count", packetGroup.serviceEnvelopes.length);
     const packet = packetGroup.serviceEnvelopes[0].packet;
