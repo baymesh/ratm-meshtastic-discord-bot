@@ -272,6 +272,7 @@ async function insertMeshPositionReport(packetGroup: PacketGroup) {
     scope.setTag("packet_count", packetGroup.serviceEnvelopes.length);
     const packet = packetGroup.serviceEnvelopes[0].packet;
     const from = packet.from;
+    scope.setTag("packet_from", from);
     const position = Position.decode(
       packetGroup.serviceEnvelopes[0].packet.decoded.payload,
     );
