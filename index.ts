@@ -267,40 +267,44 @@ function createDiscordMessage(packetGroup, text) {
 }
 
 async function insertMeshPositionReport(packetGroup: PacketGroup) {
-  const packet = packetGroup.serviceEnvelopes[0].packet;
-  const from = packet.from;
-  const position = Position.decode(
-    packetGroup.serviceEnvelopes[0].packet.decoded.payload,
-  );
-
-  const latitude = position.latitudeI / 10000000;
-  const longitude = position.longitudeI / 10000000;
-  const altitude = position.altitude;
-
-  const topics = Array.from(
-    new Set(
-      packetGroup.serviceEnvelopes.map((envelope) =>
-        envelope.topic.slice(0, envelope.topic.indexOf("/!")),
-      ),
-    ),
-  );
-
-  const gateways = packetGroup.serviceEnvelopes.map((envelope) =>
-    envelope.gatewayId.replace("!", ""),
-  );
-
-  try {
-    return await sql`
-      INSERT INTO mesh_position_reports
-      ("from", "from_hex", latitude, longitude, altitude, topics, gateways)
-      values
-        (${from}, ${nodeId2hex(from)}, ${latitude}, ${longitude}, ${altitude}, ${topics}, ${gateways})
-    `;
-  } catch (error) {
-    logger.error(
-      `MessageId: ${packetGroup.id} Error inserting mesh position report: ${error}`,
+  Sentry.withScope((scope) => {
+    scope.setTag("packet_id", packetGroup.id);
+    scope.setTag("packet_count", packetGroup.serviceEnvelopes.length);
+    const packet = packetGroup.serviceEnvelopes[0].packet;
+    const from = packet.from;
+    const position = Position.decode(
+      packetGroup.serviceEnvelopes[0].packet.decoded.payload,
     );
-  }
+
+    const latitude = position.latitudeI / 10000000;
+    const longitude = position.longitudeI / 10000000;
+    const altitude = position.altitude;
+
+    const topics = Array.from(
+      new Set(
+        packetGroup.serviceEnvelopes.map((envelope) =>
+          envelope.topic.slice(0, envelope.topic.indexOf("/!")),
+        ),
+      ),
+    );
+
+    const gateways = packetGroup.serviceEnvelopes.map((envelope) =>
+      envelope.gatewayId.replace("!", ""),
+    );
+
+    try {
+      return await sql`
+        INSERT INTO mesh_position_reports
+        ("from", "from_hex", latitude, longitude, altitude, topics, gateways)
+        values
+          (${from}, ${nodeId2hex(from)}, ${latitude}, ${longitude}, ${altitude}, ${topics}, ${gateways})
+      `;
+    } catch (error) {
+      logger.error(
+        `MessageId: ${packetGroup.id} Error inserting mesh position report: ${error}`,
+      );
+    }
+  });
   return null;
 }
 
