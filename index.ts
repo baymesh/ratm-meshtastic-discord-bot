@@ -331,6 +331,8 @@ const topics = [
   "msh/US/cenvalmesh",
   "msh/US/centralvalley",
   "msh/US/CentralValley",
+  "msh/US/CA/SantaCruz",
+  "msh/US/CA/MRY",
 ];
 
 // run every 5 seconds and pop off from the queue
