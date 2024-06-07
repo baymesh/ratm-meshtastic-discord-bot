@@ -251,8 +251,10 @@ function createDiscordMessage(packetGroup, text) {
     } else {
       if (to == "ffffffff") {
         if (
-          packetGroup.serviceEnvelopes.filter(
-            (envelope) => envelope.topic.indexOf("msh/US/bayarea/") !== -1,
+          packetGroup.serviceEnvelopes.filter((envelope) =>
+            home_topics.some((home_topic) =>
+              envelope.topic.startsWith(home_topic),
+            ),
           ).length > 0
         ) {
           sendDiscordMessage(content);
@@ -314,7 +316,19 @@ const client = mqtt.connect(mqttBrokerUrl, {
   password: mqttPassword,
 });
 
-const topics = [
+const home_topics = [
+  "msh/US/bayarea",
+  "msh/US/BayArea",
+  "msh/US/CA/bayarea",
+  "msh/US/CA/BayArea",
+];
+
+const nodes_to_log_all_positions = [
+  "fa6dc348", // me
+  "3b46b95c", // ohr
+];
+
+const topics_old = [
   "msh/US/bayarea",
   "msh/US/BayArea",
   "msh/US/CA/bayarea",
@@ -335,6 +349,8 @@ const topics = [
   "msh/US/CA/MRY",
 ];
 
+const subbed_topics = ["msh/US"];
+
 // run every 5 seconds and pop off from the queue
 const processing_timer = setInterval(() => {
   if (process.env.REDIS_ENABLED === "true") {
@@ -344,7 +360,7 @@ const processing_timer = setInterval(() => {
           `Stopping RATM instance; active_instance: ${active_instance} this instance: ${INSTANCE_ID}`,
         );
         clearInterval(processing_timer); // do we want to kill it so fast? what about things in the queue?
-        topics.forEach((topic) => client.unsubscribe(topic));
+        subbed_topics.forEach((topic) => client.unsubscribe(topic));
       }
     });
   }
@@ -366,29 +382,10 @@ function sub(topic: string) {
   });
 }
 
-/*
-sub("msh/US/bayarea");
-sub("msh/US/BayArea");
-sub("msh/US/CA/bayarea");
-sub("msh/US/CA/BayArea");
-sub("msh/US/sacvalley");
-sub("msh/US/SacValley");
-sub("msh/US/CA/sacvalley");
-sub("msh/US/CA/SacValley");
-sub("msh/US/CA/CenValMesh");
-sub("msh/US/CA/cenvalmesh");
-sub("msh/US/CA/centralvalley");
-sub("msh/US/CA/CentralValley");
-sub("msh/US/CenValMesh");
-sub("msh/US/cenvalmesh");
-sub("msh/US/centralvalley");
-sub("msh/US/CentralValley");
-*/
-
 // subscribe to everything when connected
 client.on("connect", () => {
   logger.info(`Connected to MQTT broker`);
-  topics.forEach((topic) => sub(topic));
+  subbed_topics.forEach((topic) => sub(topic));
 });
 
 // handle message received
@@ -402,6 +399,19 @@ client.on("message", async (topic: string, message: any) => {
         // decode service envelope
         const envelope = ServiceEnvelope.decode(message);
         if (!envelope.packet) {
+          return;
+        }
+
+        if (
+          home_topics.some((home_topic) => topic.startsWith(home_topic)) ||
+          nodes_to_log_all_positions.includes(
+            nodeId2hex(envelope.packet.from),
+          ) ||
+          meshPacketQueue.exists(envelope.packet.id)
+        ) {
+          // return;
+        } else {
+          // logger.info("Message received on topic: " + topic);
           return;
         }
 
