@@ -358,6 +358,7 @@ const home_topics = ba_home_topics.concat(sv_home_topics);
 const nodes_to_log_all_positions = [
   "fa6dc348", // me
   "3b46b95c", // ohr
+  "33686ed8", // balloon
 ];
 
 const topics_old = [
@@ -482,9 +483,14 @@ function shaHash(serviceEnvelope: ServiceEnvelope) {
   return hash.digest("hex");
 }
 
+let packetCountById: { [key: string]: number } = {};
+
 function processPacketGroup(packetGroup: PacketGroup) {
   const packet = packetGroup.serviceEnvelopes[0].packet;
   const portnum = packet?.decoded?.portnum;
+
+  packetCountById[packet.from.toString(16)] =
+    packetGroup.serviceEnvelopes[0].packet.hopStart;
 
   if (portnum === 1) {
     processTextMessage(packetGroup);
@@ -496,6 +502,13 @@ function processPacketGroup(packetGroup: PacketGroup) {
     const user = User.decode(packet.decoded.payload);
     const from = packet.from.toString(16);
     updateNodeDB(from, user.longName);
+    logger.info("packetCountById: " + JSON.stringify(packetCountById));
+  } else {
+    logger.error(
+      `MessageId: ${packetGroup.id} Unknown portnum ${portnum} from ${prettyNodeName(
+        packet.from,
+      )}`,
+    );
   }
 }
 
