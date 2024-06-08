@@ -125,11 +125,13 @@ if (!process.env.DISCORD_WEBHOOK_URL) {
   process.exit(-1);
 }
 
-const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+const baWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
+const svWebhookUrl = process.env.SV_DISCORD_WEBHOOK_URL;
+
 const mesh_topic = process.env.MQTT_TOPIC || "msh/US/bayarea";
 const grouping_duration = parseInt(process.env.GROUPING_DURATION || "10000");
 
-function sendDiscordMessage(payload: any) {
+function sendDiscordMessage(webhookUrl: string, payload: any) {
   const data = typeof payload === "string" ? { content: payload } : payload;
 
   return axios
@@ -177,7 +179,7 @@ function createDiscordMessage(packetGroup, text) {
   const nodeUrl = `https://meshtastic.liamcottle.net/?node_id=${packet.from}`;
 
   const content = {
-    username: "Bayme.sh Bot",
+    username: "Mesh Bot",
     avatar_url:
       "https://cdn.discordapp.com/app-icons/1240017058046152845/295e77bec5f9a44f7311cf8723e9c332.png",
     embeds: [
@@ -257,7 +259,27 @@ function createDiscordMessage(packetGroup, text) {
             ),
           ).length > 0
         ) {
-          sendDiscordMessage(content);
+          if (
+            packetGroup.serviceEnvelopes.filter((envelope) =>
+              ba_home_topics.some((home_topic) =>
+                envelope.topic.startsWith(home_topic),
+              ),
+            ).length > 0
+          ) {
+            sendDiscordMessage(baWebhookUrl, content);
+          }
+
+          if (
+            packetGroup.serviceEnvelopes.filter((envelope) =>
+              sv_home_topics.some((home_topic) =>
+                envelope.topic.startsWith(home_topic),
+              ),
+            ).length > 0
+          ) {
+            if (svWebhookUrl) {
+              sendDiscordMessage(svWebhookUrl, content);
+            }
+          }
         } else {
           logger.info(
             `MessageId: ${packetGroup.id} No packets found in topic: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
@@ -316,12 +338,22 @@ const client = mqtt.connect(mqttBrokerUrl, {
   password: mqttPassword,
 });
 
-const home_topics = [
+const ba_home_topics = [
   "msh/US/bayarea",
   "msh/US/BayArea",
   "msh/US/CA/bayarea",
   "msh/US/CA/BayArea",
 ];
+
+const sv_home_topics = [
+  "msh/US/sacvalley",
+  "msh/US/SacValley",
+  "msh/US/CA/sacvalley",
+  "msh/US/CA/SacValley",
+];
+
+// home_topics is both ba and sv
+const home_topics = ba_home_topics.concat(sv_home_topics);
 
 const nodes_to_log_all_positions = [
   "fa6dc348", // me
