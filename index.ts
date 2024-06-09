@@ -98,7 +98,9 @@ const getNodeName = (nodeId: string | number) => {
 };
 
 const nodeId2hex = (nodeId: string | number) => {
-  return typeof nodeId === "number" ? nodeId.toString(16) : nodeId;
+  return typeof nodeId === "number"
+    ? nodeId.toString(16).padStart(8, "0")
+    : nodeId;
 };
 
 const prettyNodeName = (nodeId: string | number) => {
