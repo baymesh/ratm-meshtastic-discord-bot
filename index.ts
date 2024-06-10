@@ -502,7 +502,8 @@ client.on("message", async (topic: string, message: any) => {
       }
     }
   } catch (err) {
-    logger.error(String(err));
+    logger.error("Error: " + String(err));
+    Sentry.captureException(err);
   }
 });
 
