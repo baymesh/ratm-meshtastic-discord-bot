@@ -78,10 +78,32 @@ const ignoreDB = JSON.parse(fs.readFileSync("./ignoreDB.json").toString());
 const cache = new FifoKeyCache();
 const meshPacketQueue = new MeshPacketQueue();
 
-const updateNodeDB = (node: string, longName: string) => {
+const updateNodeDB = (
+  node: string,
+  longName: string,
+  nodeInfo: any,
+  hopStart: number,
+) => {
   nodeDB[node] = longName;
   if (process.env.REDIS_ENABLED === "true") {
     redisClient.set(`baymesh:node:${node}`, longName);
+    // {"id":"!22d6db03","longName":"Taylor Mountain W4","shortName":"SRW4","macaddr":"05Ei1tsD","hwModel":"RAK4631","role":"ROUTER_CLIENT"}
+    const nodeInfoGenericObj = JSON.parse(JSON.stringify(nodeInfo));
+    // remove leading "!" from id
+    nodeInfoGenericObj.id = nodeInfoGenericObj.id.replace("!", "");
+    // add hopStart to nodeInfo
+    nodeInfoGenericObj.hopStart = hopStart;
+    redisClient.json
+      .set(`baymesh:nodeinfo:${node}`, "$", nodeInfoGenericObj)
+      .then(() => {
+        // redisClient.json
+        //   .get(`baymesh:nodeinfo:${node}`) // , { path: "$.hwModel" }
+        //   .then((data) => {
+        //     if (data) {
+        //       logger.info(JSON.stringify(data));
+        //     }
+        //   });
+      });
   }
   fs.writeFileSync(
     path.join(__dirname, "./nodeDB.json"),
@@ -94,6 +116,11 @@ const isInIgnoreDB = (node: string) => {
 };
 
 const getNodeName = (nodeId: string | number) => {
+  // redisClient.json.get(`baymesh:nodeinfo:${nodeId}`).then((nodeInfo) => {
+  //   if (nodeInfo) {
+  //     logger.info(nodeInfo);
+  //   }
+  // });
   return nodeDB[nodeId2hex(nodeId)] || "Unknown";
 };
 
@@ -460,9 +487,9 @@ client.on("message", async (topic: string, message: any) => {
         }
 
         if (cache.exists(shaHash(envelope))) {
-          logger.debug(
-            `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
-          );
+          // logger.debug(
+          //   `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
+          // );
           return;
         }
 
@@ -485,14 +512,9 @@ function shaHash(serviceEnvelope: ServiceEnvelope) {
   return hash.digest("hex");
 }
 
-let packetCountById: { [key: string]: number } = {};
-
 function processPacketGroup(packetGroup: PacketGroup) {
   const packet = packetGroup.serviceEnvelopes[0].packet;
   const portnum = packet?.decoded?.portnum;
-
-  packetCountById[packet.from.toString(16)] =
-    packetGroup.serviceEnvelopes[0].packet.hopStart;
 
   if (portnum === 1) {
     processTextMessage(packetGroup);
@@ -503,14 +525,13 @@ function processPacketGroup(packetGroup: PacketGroup) {
   } else if (portnum === 4) {
     const user = User.decode(packet.decoded.payload);
     const from = packet.from.toString(16);
-    updateNodeDB(from, user.longName);
-    logger.info("packetCountById: " + JSON.stringify(packetCountById));
+    updateNodeDB(from, user.longName, user, packet.hopStart);
   } else {
-    logger.error(
-      `MessageId: ${packetGroup.id} Unknown portnum ${portnum} from ${prettyNodeName(
-        packet.from,
-      )}`,
-    );
+    // logger.debug(
+    //   `MessageId: ${packetGroup.id} Unknown portnum ${portnum} from ${prettyNodeName(
+    //     packet.from,
+    //   )}`,
+    // );
   }
 }
 
