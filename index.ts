@@ -93,6 +93,7 @@ const updateNodeDB = (
     nodeInfoGenericObj.id = nodeInfoGenericObj.id.replace("!", "");
     // add hopStart to nodeInfo
     nodeInfoGenericObj.hopStart = hopStart;
+    nodeInfoGenericObj.updatedAt = new Date().getTime();
     redisClient.json
       .set(`baymesh:nodeinfo:${node}`, "$", nodeInfoGenericObj)
       .then(() => {
