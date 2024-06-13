@@ -297,18 +297,21 @@ const createDiscordMessage = async (packetGroup, text) => {
     }
 
     if (process.env.ENVIRONMENT === "production" && to !== "ffffffff") {
-      if (
-        packetGroup.serviceEnvelopes.filter((envelope) =>
-          home_topics.some((home_topic) =>
-            envelope.topic.startsWith(home_topic),
-          ),
-        ).length === 0
-      ) {
-        logger.info(
-          `MessageId: ${packetGroup.id} No packets found in topic: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
-        );
-        return;
-      }
+      logger.info(
+        `MessageId: ${packetGroup.id} Not to public channel: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
+      );
+      return;
+    }
+
+    if (
+      packetGroup.serviceEnvelopes.filter((envelope) =>
+        home_topics.some((home_topic) => envelope.topic.startsWith(home_topic)),
+      ).length === 0
+    ) {
+      logger.info(
+        `MessageId: ${packetGroup.id} No packets found in topic: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
+      );
+      return;
     }
 
     let nodeInfos = await getNodeInfos(
