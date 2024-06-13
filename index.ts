@@ -296,7 +296,7 @@ const createDiscordMessage = async (packetGroup, text) => {
       );
     }
 
-    if (process.env.ENVIRONMENT === "production" && to === "ffffffff") {
+    if (process.env.ENVIRONMENT === "production" && to !== "ffffffff") {
       if (
         packetGroup.serviceEnvelopes.filter((envelope) =>
           home_topics.some((home_topic) =>
