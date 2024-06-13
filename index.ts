@@ -84,36 +84,108 @@ const updateNodeDB = (
   nodeInfo: any,
   hopStart: number,
 ) => {
-  nodeDB[node] = longName;
-  if (process.env.REDIS_ENABLED === "true") {
-    redisClient.set(`baymesh:node:${node}`, longName);
-    // {"id":"!22d6db03","longName":"Taylor Mountain W4","shortName":"SRW4","macaddr":"05Ei1tsD","hwModel":"RAK4631","role":"ROUTER_CLIENT"}
-    const nodeInfoGenericObj = JSON.parse(JSON.stringify(nodeInfo));
-    // remove leading "!" from id
-    nodeInfoGenericObj.id = nodeInfoGenericObj.id.replace("!", "");
-    // add hopStart to nodeInfo
-    nodeInfoGenericObj.hopStart = hopStart;
-    nodeInfoGenericObj.updatedAt = new Date().getTime();
-    redisClient.json
-      .set(`baymesh:nodeinfo:${node}`, "$", nodeInfoGenericObj)
-      .then(() => {
-        // redisClient.json
-        //   .get(`baymesh:nodeinfo:${node}`) // , { path: "$.hwModel" }
-        //   .then((data) => {
-        //     if (data) {
-        //       logger.info(JSON.stringify(data));
-        //     }
-        //   });
-      });
+  try {
+    nodeDB[node] = longName;
+    if (process.env.REDIS_ENABLED === "true") {
+      redisClient.set(`baymesh:node:${node}`, longName);
+      // {"id":"!22d6db03","longName":"Taylor Mountain W4","shortName":"SRW4","macaddr":"05Ei1tsD","hwModel":"RAK4631","role":"ROUTER_CLIENT"}
+      const nodeInfoGenericObj = JSON.parse(JSON.stringify(nodeInfo));
+      // remove leading "!" from id
+      nodeInfoGenericObj.id = nodeInfoGenericObj.id.replace("!", "");
+      // add hopStart to nodeInfo
+      nodeInfoGenericObj.hopStart = hopStart;
+      nodeInfoGenericObj.updatedAt = new Date().getTime();
+      redisClient.json
+        .set(`baymesh:nodeinfo:${node}`, "$", nodeInfoGenericObj)
+        .then(() => {
+          // redisClient.json
+          //   .get(`baymesh:nodeinfo:${node}`) // , { path: "$.hwModel" }
+          //   .then((data) => {
+          //     if (data) {
+          //       logger.info(JSON.stringify(data));
+          //     }
+          //   });
+        })
+        .catch((err) => {
+          // console.log(nodeInfoGenericObj);
+          // if (err === "Error: Existing key has wrong Redis type") {
+          redisClient.type(`baymesh:nodeinfo:${node}`).then((result) => {
+            logger.info(result);
+            if (result === "string") {
+              redisClient.del(`baymesh:nodeinfo:${node}`).then(() => {
+                redisClient.json
+                  .set(`baymesh:nodeinfo:${node}`, "$", nodeInfoGenericObj)
+                  .then(() => {
+                    logger.info("deleted and re-added node info for: " + node);
+                  })
+                  .catch((err) => {
+                    logger.error(err);
+                  });
+              });
+            }
+          });
+          // }
+          logger.error(`redis key: baymesh:nodeinfo:${node} ${err}`);
+        });
+    }
+    fs.writeFileSync(
+      path.join(__dirname, "./nodeDB.json"),
+      JSON.stringify(nodeDB, null, 2),
+    );
+  } catch (err) {
+    // logger.error(err.message);
+    Sentry.captureException(err);
   }
-  fs.writeFileSync(
-    path.join(__dirname, "./nodeDB.json"),
-    JSON.stringify(nodeDB, null, 2),
-  );
 };
 
 const isInIgnoreDB = (node: string) => {
   return ignoreDB.includes(node);
+};
+
+const getNodeInfos = async (nodeIds: string[], debug: boolean) => {
+  try {
+    // const foo = nodeIds.slice(0, nodeIds.length - 1);
+    nodeIds = Array.from(new Set(nodeIds));
+    const nodeInfos = await redisClient.json.mGet(
+      nodeIds.map((nodeId) => `baymesh:nodeinfo:${nodeId2hex(nodeId)}`),
+      "$",
+    );
+    if (debug) {
+      console.log("DEBUGGGG", nodeInfos);
+    }
+
+    const formattedNodeInfos = nodeInfos.flat().reduce((acc, item) => {
+      if (item && item.id) {
+        acc[item.id] = item;
+      }
+      return acc;
+    }, {});
+
+    // const formattedNodeInfos = nodeInfos.reduce((acc, [info]) => {
+    //   if (info && info.id) {
+    //     acc[info.id] = info;
+    //   }
+    //   return acc;
+    // }, {});
+    if (Object.keys(formattedNodeInfos).length !== nodeIds.length) {
+      // figure out which nodes are missing from nodeInfo and print them
+      // console.log(
+      //   "ABC",
+      //   nodeInfos[0].map((nodeInfo) => nodeInfo.id),
+      // );
+      // console.log(Object.keys(formattedNodeInfos).length, nodeIds.length);
+      const missingNodes = nodeIds.filter((nodeId) => {
+        return formattedNodeInfos[nodeId] === undefined;
+      });
+      logger.info("Missing nodeInfo for nodes: " + missingNodes.join(","));
+    }
+    // console.log("Feep", nodeInfos);
+    return formattedNodeInfos;
+  } catch (err) {
+    // logger.error(err.message);
+    Sentry.captureException(err);
+  }
+  return {};
 };
 
 const getNodeName = (nodeId: string | number) => {
@@ -176,103 +248,45 @@ function sendDiscordMessage(webhookUrl: string, payload: any) {
     });
 }
 
-Object.keys(nodeDB).forEach((nodeId) => {
-  if (process.env.REDIS_ENABLED === "true") {
-    const longName = nodeDB[nodeId];
-    redisClient.exists(`baymesh:node:${nodeId}`).then((exists) => {
-      if (!exists) {
-        redisClient.set(`baymesh:node:${nodeId}`, longName);
-      }
-    });
-  }
-});
+// Object.keys(nodeDB).forEach((nodeId) => {
+//   if (process.env.REDIS_ENABLED === "true") {
+//     const longName = nodeDB[nodeId];
+//     redisClient.exists(`baymesh:node:${nodeId}`).then((exists) => {
+//       if (!exists) {
+//         redisClient.set(`baymesh:node:${nodeId}`, longName);
+//       }
+//     });
+//   }
+// });
 
 function processTextMessage(packetGroup: PacketGroup) {
   const packet = packetGroup.serviceEnvelopes[0].packet;
   const text = packet.decoded.payload.toString();
+  logger.debug("createDiscordMessage: " + text);
   createDiscordMessage(packetGroup, text);
 }
 
-function createDiscordMessage(packetGroup, text) {
-  const packet = packetGroup.serviceEnvelopes[0].packet;
-  const to = packet.to.toString(16);
-  const from = packet.from.toString(16);
+const createDiscordMessage = async (packetGroup, text) => {
+  try {
+    const packet = packetGroup.serviceEnvelopes[0].packet;
+    const to = packet.to.toString(16);
+    const from = packet.from.toString(16);
+    const nodeIdHex = nodeId2hex(from);
 
-  // discard text messages in the form of "seq 6034" "seq 6025"
-  if (text.match(/^seq \d+$/)) {
-    return;
-  }
+    // discard text messages in the form of "seq 6034" "seq 6025"
+    if (text.match(/^seq \d+$/)) {
+      return;
+    }
 
-  const nodeIdHex = nodeId2hex(from);
-  const nodeName = getNodeName(from);
+    if (isInIgnoreDB(from)) {
+      logger.info(
+        `MessageId: ${packetGroup.id} Ignoring message from ${prettyNodeName(
+          from,
+        )} to ${prettyNodeName(to)} : ${text}`,
+      );
+      return;
+    }
 
-  const nodeUrl = `https://meshtastic.liamcottle.net/?node_id=${packet.from}`;
-
-  const content = {
-    username: "Mesh Bot",
-    avatar_url:
-      "https://cdn.discordapp.com/app-icons/1240017058046152845/295e77bec5f9a44f7311cf8723e9c332.png",
-    embeds: [
-      {
-        url: nodeUrl,
-        color: 6810260,
-        timestamp: new Date(packet.rxTime * 1000).toISOString(),
-
-        author: {
-          name: `${nodeName}`,
-          url: nodeUrl,
-          icon_url: "https://cdn.discordapp.com/embed/avatars/0.png",
-        },
-        fields: [
-          {
-            name: `Message (${packetGroup.id.toString(16)})`,
-            value: text,
-          },
-          {
-            name: "Node ID",
-            value: `${nodeIdHex}`,
-            // inline: true,
-          },
-          ...packetGroup.serviceEnvelopes
-            .filter(
-              (value, index, self) =>
-                self.findIndex((t) => t.gatewayId === value.gatewayId) ===
-                index,
-            )
-            .map((envelope) => {
-              const gatewayDelay =
-                envelope.mqttTime.getTime() - packetGroup.time.getTime();
-
-              if (
-                envelope.gatewayId === "!75f1804c" ||
-                envelope.gatewayId === "!3b46b95c"
-              ) {
-                // console.log(envelope);
-              }
-
-              return {
-                name: "Gateway",
-                value: `${prettyNodeName(envelope.gatewayId.replace("!", ""))} (${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops)${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
-                inline: true,
-              };
-            }),
-        ],
-      },
-    ],
-  };
-
-  //console.log(packetGroup, packetGroup.serviceEnvelopes);
-
-  if (isInIgnoreDB(from)) {
-    logger.info(
-      `MessageId: ${packetGroup.id} Ignoring message from ${prettyNodeName(
-        from,
-      )} to ${prettyNodeName(to)} : ${text}`,
-    );
-  } else {
-    logger.info(
-      `MessageId: ${packetGroup.id} Received message from ${prettyNodeName(from)} to ${prettyNodeName(to)} : ${text}`,
-    );
     // ignore packets older than 5 minutes
     if (new Date(packet.rxTime * 1000) < new Date(Date.now() - 5 * 60 * 1000)) {
       logger.info(
@@ -280,45 +294,159 @@ function createDiscordMessage(packetGroup, text) {
           from,
         )} to ${prettyNodeName(to)} : ${text}`,
       );
-    } else {
-      if (to == "ffffffff") {
-        if (
-          packetGroup.serviceEnvelopes.filter((envelope) =>
-            home_topics.some((home_topic) =>
-              envelope.topic.startsWith(home_topic),
-            ),
-          ).length > 0
-        ) {
-          if (
-            packetGroup.serviceEnvelopes.filter((envelope) =>
-              ba_home_topics.some((home_topic) =>
-                envelope.topic.startsWith(home_topic),
-              ),
-            ).length > 0
-          ) {
-            sendDiscordMessage(baWebhookUrl, content);
-          }
+    }
 
-          if (
-            packetGroup.serviceEnvelopes.filter((envelope) =>
-              sv_home_topics.some((home_topic) =>
-                envelope.topic.startsWith(home_topic),
-              ),
-            ).length > 0
-          ) {
-            if (svWebhookUrl) {
-              sendDiscordMessage(svWebhookUrl, content);
-            }
-          }
-        } else {
-          logger.info(
-            `MessageId: ${packetGroup.id} No packets found in topic: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
-          );
-        }
+    if (process.env.ENVIRONMENT === "production" && to !== "ffffffff") {
+      if (
+        packetGroup.serviceEnvelopes.filter((envelope) =>
+          home_topics.some((home_topic) =>
+            envelope.topic.startsWith(home_topic),
+          ),
+        ).length === 0
+      ) {
+        logger.info(
+          `MessageId: ${packetGroup.id} No packets found in topic: ${packetGroup.serviceEnvelopes.map((envelope) => envelope.topic)}`,
+        );
+        return;
       }
     }
+
+    let nodeInfos = await getNodeInfos(
+      packetGroup.serviceEnvelopes
+        .map((se) => se.gatewayId.replace("!", ""))
+        .concat(from),
+      false,
+    );
+
+    // delete nodeInfos["fa989780"];
+
+    console.log(
+      packetGroup.id,
+      packetGroup.serviceEnvelopes
+        .map((se) => se.gatewayId.replace("!", ""))
+        .concat(from),
+      nodeInfos,
+    );
+
+    // if (Object.keys(nodeInfos).length === 0) {
+    //   console.log("BeepBeep", nodeInfos);
+    //   nodeInfos = await getNodeInfos(
+    //     packetGroup.serviceEnvelopes
+    //       .map((se) => se.gatewayId.replace("!", ""))
+    //       .concat(from),
+    //     true,
+    //   );
+    //   console.log("HonkHonk", nodeInfos);
+    // }
+
+    let avatarUrl = "https://cdn.discordapp.com/embed/avatars/0.png";
+    if (["3b46b95c", "75f1804c", "fa6dc348"].includes(nodeIdHex)) {
+      avatarUrl =
+        "https://cdn.discordapp.com/avatars/206296059796783104/b3c5c970fe355e9c01786dbe6749db1a.webp";
+    }
+
+    const content = {
+      username: "Mesh Bot",
+      avatar_url:
+        "https://cdn.discordapp.com/app-icons/1240017058046152845/295e77bec5f9a44f7311cf8723e9c332.png",
+      embeds: [
+        {
+          url: `https://data.bayme.sh/nodeInfo?id=${nodeIdHex}`,
+          color: 6810260,
+          timestamp: new Date(packet.rxTime * 1000).toISOString(),
+
+          author: {
+            name: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].longName : "Unknown"}`,
+            url: `https://data.bayme.sh/nodeInfo?id=${nodeIdHex}`,
+            icon_url: avatarUrl,
+          },
+          title: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].shortName : "UNK"}`,
+          description: text,
+          fields: [
+            // {
+            //   name: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].shortName : "UNK"}`,
+            //   value: text,
+            // },
+            // {
+            //   name: "Node ID",
+            //   value: `${nodeIdHex}`,
+            //   inline: true,
+            // },
+            {
+              name: "Packet",
+              value: `[${packetGroup.id.toString(16)}](https://meshview.armooo.net/packet/${packetGroup.id})`,
+              inline: true,
+            },
+            ...packetGroup.serviceEnvelopes
+              .filter(
+                (value, index, self) =>
+                  self.findIndex((t) => t.gatewayId === value.gatewayId) ===
+                  index,
+              )
+              .map((envelope) => {
+                const gatewayDelay =
+                  envelope.mqttTime.getTime() - packetGroup.time.getTime();
+
+                if (
+                  envelope.gatewayId === "!75f1804c" ||
+                  envelope.gatewayId === "!3b46b95c"
+                ) {
+                  // console.log(envelope);
+                }
+
+                let gatewayDisplaName = envelope.gatewayId.replace("!", "");
+                if (nodeInfos[envelope.gatewayId.replace("!", "")]) {
+                  gatewayDisplaName =
+                    // nodeInfos[envelope.gatewayId.replace("!", "")].shortName +
+                    // " - " +
+                    nodeInfos[envelope.gatewayId.replace("!", "")].shortName; //+
+                  // " " +
+                  // envelope.gatewayId.replace("!", "");
+                }
+
+                return {
+                  name: `Gateway`,
+                  value: `[${gatewayDisplaName}](https://data.bayme.sh/nodeInfo?id=${envelope.gatewayId.replace("!", "")}) (${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops)${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
+                  inline: true,
+                };
+              }),
+          ],
+        },
+      ],
+    };
+
+    //console.log(packetGroup, packetGroup.serviceEnvelopes);
+
+    logger.info(
+      `MessageId: ${packetGroup.id} Received message from ${prettyNodeName(from)} to ${prettyNodeName(to)} : ${text}`,
+    );
+
+    if (
+      packetGroup.serviceEnvelopes.filter((envelope) =>
+        ba_home_topics.some((home_topic) =>
+          envelope.topic.startsWith(home_topic),
+        ),
+      ).length > 0
+    ) {
+      sendDiscordMessage(baWebhookUrl, content);
+    }
+
+    if (
+      packetGroup.serviceEnvelopes.filter((envelope) =>
+        sv_home_topics.some((home_topic) =>
+          envelope.topic.startsWith(home_topic),
+        ),
+      ).length > 0
+    ) {
+      if (svWebhookUrl) {
+        sendDiscordMessage(svWebhookUrl, content);
+      }
+    }
+  } catch (err) {
+    logger.error("Error: " + String(err));
+    Sentry.captureException(err);
   }
-}
+};
 
 async function insertMeshPositionReport(packetGroup: PacketGroup) {
   Sentry.withScope(async (scope) => {
