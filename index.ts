@@ -347,6 +347,16 @@ const createDiscordMessage = async (packetGroup, text) => {
       avatarUrl =
         "https://cdn.discordapp.com/avatars/206296059796783104/b3c5c970fe355e9c01786dbe6749db1a.webp";
     }
+    if (["57865c0a"].includes(nodeIdHex)) {
+      // anon
+      avatarUrl =
+        "https://cdn.discordapp.com/avatars/258714316314771456/1f0810a4c9bf346e3a50129db1376003.webp";
+    }
+    if (["3c228feb"].includes(nodeIdHex)) {
+      // jb actual
+      avatarUrl =
+        "https://cdn.discordapp.com/avatars/1199587003965128735/99150ce39078993dc47d989bd91eda87.webp";
+    }
 
     const content = {
       username: "Mesh Bot",
@@ -415,7 +425,7 @@ const createDiscordMessage = async (packetGroup, text) => {
 
                 return {
                   name: `Gateway`,
-                  value: `[${gatewayDisplaName}](https://data.bayme.sh/nodeInfo?id=${envelope.gatewayId.replace("!", "")}) (${hopText})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
+                  value: `[${gatewayDisplaName} (${hopText})](https://data.bayme.sh/nodeInfo?id=${envelope.gatewayId.replace("!", "")})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
                   inline: true,
                 };
               }),
