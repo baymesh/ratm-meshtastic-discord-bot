@@ -407,9 +407,15 @@ const createDiscordMessage = async (packetGroup, text) => {
                   // envelope.gatewayId.replace("!", "");
                 }
 
+                let hopText = `${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops`;
+
+                if (envelope.gatewayId.replace("!", "") === nodeIdHex) {
+                  hopText = "Self Gated";
+                }
+
                 return {
                   name: `Gateway`,
-                  value: `[${gatewayDisplaName}](https://data.bayme.sh/nodeInfo?id=${envelope.gatewayId.replace("!", "")}) (${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops)${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
+                  value: `[${gatewayDisplaName}](https://data.bayme.sh/nodeInfo?id=${envelope.gatewayId.replace("!", "")}) (${hopText})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
                   inline: true,
                 };
               }),
@@ -657,7 +663,7 @@ function processPacketGroup(packetGroup: PacketGroup) {
     }
   } else if (portnum === 4) {
     const user = User.decode(packet.decoded.payload);
-    const from = packet.from.toString(16);
+    const from = nodeId2hex(packet.from);
     updateNodeDB(from, user.longName, user, packet.hopStart);
   } else {
     // logger.debug(
