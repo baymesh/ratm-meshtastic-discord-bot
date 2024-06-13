@@ -357,7 +357,7 @@ const createDiscordMessage = async (packetGroup, text) => {
       avatarUrl =
         "https://cdn.discordapp.com/avatars/1199587003965128735/99150ce39078993dc47d989bd91eda87.webp";
     }
-    if (["3b46a41c"].includes(nodeIdHex)) {
+    if (["3b46a41c", "fabae8ec"].includes(nodeIdHex)) {
       // fnnc
       avatarUrl =
         "https://cdn.discordapp.com/avatars/988980779101077504/e4dee002c1ad0dc46a74adae96b6a52f.webp";
