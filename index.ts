@@ -362,6 +362,11 @@ const createDiscordMessage = async (packetGroup, text) => {
       avatarUrl =
         "https://cdn.discordapp.com/avatars/988980779101077504/e4dee002c1ad0dc46a74adae96b6a52f.webp";
     }
+    if (["7c5a3f88", "efb87a8", "da659714", "0c18fe8c"].includes(nodeIdHex)) {
+      // ktsn
+      avatarUrl =
+        "https://cdn.discordapp.com/guilds/1215705285159817236/users/80892297905963008/avatars/4c7c3358112c236b1ed96c45d005d4b4.webp";
+    }
 
     const content = {
       username: "Mesh Bot",
