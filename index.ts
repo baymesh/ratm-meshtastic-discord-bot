@@ -269,8 +269,8 @@ function processTextMessage(packetGroup: PacketGroup) {
 const createDiscordMessage = async (packetGroup, text) => {
   try {
     const packet = packetGroup.serviceEnvelopes[0].packet;
-    const to = packet.to.toString(16);
-    const from = packet.from.toString(16);
+    const to = nodeId2hex(packet.to);
+    const from = nodeId2hex(packet.from);
     const nodeIdHex = nodeId2hex(from);
 
     // discard text messages in the form of "seq 6034" "seq 6025"
