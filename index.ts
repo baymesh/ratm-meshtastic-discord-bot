@@ -12,6 +12,7 @@ import MeshPacketQueue, { PacketGroup } from "./src/MeshPacketQueue";
 import * as Sentry from "@sentry/node";
 import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import { createClient } from "redis";
+import { env } from "process";
 
 // generate a pseduo uuid kinda thing to use as an instance id
 const INSTANCE_ID = (() => {
@@ -644,16 +645,31 @@ client.on("message", async (topic: string, message: any) => {
           }
         }
 
-        if (cache.exists(shaHash(envelope))) {
-          // logger.debug(
-          //   `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
-          // );
-          return;
-        }
+        if (process.env.REDIS_ENABLED === "true") {
+          const redisKey = `baymesh:envelope:${nodeId2hex(envelope.packet.id)}:${nodeId2hex(envelope.gatewayId.replace("!", ""))}:${nodeId2hex(envelope.packet.from)}`;
+          const seenBefore = await redisClient.exists(redisKey);
+          if (seenBefore) {
+            // logger.debug(
+            //   `RedisCache: Already received envelope with baymesh:envelope:${nodeId2hex(envelope.packet.id)}:${nodeId2hex(envelope.gatewayId.replace("!", ""))}:${nodeId2hex(envelope.packet.from)}`,
+            // );
+            return;
+          }
 
-        if (cache.add(shaHash(envelope))) {
-          // periodically print the nodeDB to the console
-          //console.log(JSON.stringify(nodeDB));
+          logger.debug(`setting ${redisKey}`);
+
+          redisClient.set(redisKey, 1);
+        } else {
+          if (cache.exists(shaHash(envelope))) {
+            // logger.debug(
+            //   `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
+            // );
+            return;
+          }
+
+          if (cache.add(shaHash(envelope))) {
+            // periodically print the nodeDB to the console
+            //console.log(JSON.stringify(nodeDB));
+          }
         }
 
         meshPacketQueue.add(envelope, topic);
