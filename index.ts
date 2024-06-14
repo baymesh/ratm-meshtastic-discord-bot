@@ -323,13 +323,13 @@ const createDiscordMessage = async (packetGroup, text) => {
 
     // delete nodeInfos["fa989780"];
 
-    console.log(
-      packetGroup.id,
-      packetGroup.serviceEnvelopes
-        .map((se) => se.gatewayId.replace("!", ""))
-        .concat(from),
-      nodeInfos,
-    );
+    // console.log(
+    //   packetGroup.id,
+    //   packetGroup.serviceEnvelopes
+    //     .map((se) => se.gatewayId.replace("!", ""))
+    //     .concat(from),
+    //   nodeInfos,
+    // );
 
     // if (Object.keys(nodeInfos).length === 0) {
     //   console.log("BeepBeep", nodeInfos);
