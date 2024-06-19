@@ -747,9 +747,9 @@ function processPacketGroup(packetGroup: PacketGroup) {
         let logString =
           "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
         foo.forEach((env) => {
-          logString += `skippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
+          logString += `logtypeskippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
         });
-        logger.info(logString);
+        logger.info(logString.trim());
       }
       // cake's gateways
       if (gateways.includes("a20afddc") || gateways.includes("3b46a3ec")) {
