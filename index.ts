@@ -618,8 +618,21 @@ client.on("message", async (topic: string, message: any) => {
           return;
         }
         // decode service envelope
-        const envelope = ServiceEnvelope.decode(message);
-        if (!envelope.packet) {
+        let envelope;
+        try {
+          envelope = ServiceEnvelope.decode(message);
+        } catch (envDecodeErr) {
+          if (
+            String(envDecodeErr).indexOf("invalid wire type 7 at offset 1") ===
+            -1
+          ) {
+            logger.error(
+              `MessageId: Error decoding service envelope: ${envDecodeErr}`,
+            );
+          }
+          return;
+        }
+        if (!envelope || !envelope.packet) {
           return;
         }
 
@@ -655,7 +668,7 @@ client.on("message", async (topic: string, message: any) => {
             return;
           }
 
-          logger.debug(`setting ${redisKey}`);
+          //logger.debug(`setting ${redisKey}`);
 
           redisClient.set(redisKey, 1);
         } else {
@@ -690,6 +703,69 @@ function shaHash(serviceEnvelope: ServiceEnvelope) {
 function processPacketGroup(packetGroup: PacketGroup) {
   const packet = packetGroup.serviceEnvelopes[0].packet;
   const portnum = packet?.decoded?.portnum;
+
+  // ${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart
+
+  // if all packets in packetGroup.serviceEnvelopes have hopStart of zero and hopLimit of zero
+  if (
+    packetGroup.serviceEnvelopes.every(
+      (envelope) => envelope.packet.hopStart === 0,
+    ) &&
+    packetGroup.serviceEnvelopes.every(
+      (envelope) => envelope.packet.hopLimit === 0,
+    )
+  ) {
+    const gateways = Array.from(
+      new Set(
+        packetGroup.serviceEnvelopes.map((envelope) =>
+          envelope.gatewayId.replace("!", ""),
+        ),
+      ),
+    );
+    // console.log(gateways);
+    // my gateways
+
+    getNodeInfos([
+      "a20afe2c",
+      "3b46b95c",
+      "75f1804c",
+      "a20afddc",
+      "3b46a3ec",
+    ]).then((nodeInfos) => {
+      // console.log(nodeInfos);
+      nodeInfos["a20afe2c"] = { shortName: "GUNT" };
+      if (
+        gateways.includes("a20afe2c") || // GUNT
+        gateways.includes("3b46b95c") || // OHR
+        gateways.includes("75f1804c") // NOHR
+      ) {
+        // print SNR/RSSI for any of the three gateways
+        const foo = packetGroup.serviceEnvelopes.filter((envelope) =>
+          ["!a20afe2c", "!3b46b95c", "!75f1804c"].includes(envelope.gatewayId),
+        );
+        // console.log(foo);
+        let logString =
+          "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
+        foo.forEach((env) => {
+          logString += `skippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
+        });
+        logger.info(logString);
+      }
+      // cake's gateways
+      if (gateways.includes("a20afddc") || gateways.includes("3b46a3ec")) {
+        const foo = packetGroup.serviceEnvelopes.filter((envelope) =>
+          ["!a20afddc", "!3b46a3ec"].includes(envelope.gatewayId),
+        );
+        // console.log(foo);
+        let logString =
+          "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
+        foo.forEach((env) => {
+          logString += `cakey, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
+        });
+        logger.info(logString.trim());
+      }
+    });
+  }
 
   if (portnum === 1) {
     processTextMessage(packetGroup);
