@@ -430,6 +430,13 @@ const createDiscordMessage = async (packetGroup, text) => {
 
                 let hopText = `${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops`;
 
+                if (
+                  envelope.packet.hopStart === 0 &&
+                  envelope.packet.hopLimit === 0
+                ) {
+                  hopText = `${envelope.packet.rxSnr} / ${envelope.packet.rxRssi} dBm`;
+                }
+
                 if (envelope.gatewayId.replace("!", "") === nodeIdHex) {
                   hopText = "Self Gated";
                 }
@@ -747,7 +754,7 @@ function processPacketGroup(packetGroup: PacketGroup) {
         let logString =
           "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
         foo.forEach((env) => {
-          logString += `logtypeskippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
+          logString += `logtype_skippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
         });
         logger.info(logString.trim());
       }
@@ -760,7 +767,7 @@ function processPacketGroup(packetGroup: PacketGroup) {
         let logString =
           "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
         foo.forEach((env) => {
-          logString += `cakey, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
+          logString += `logtype_cakey, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
         });
         logger.info(logString.trim());
       }
