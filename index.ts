@@ -763,6 +763,41 @@ function processPacketGroup(packetGroup: PacketGroup) {
         const foo = packetGroup.serviceEnvelopes.filter((envelope) =>
           ["!a20afddc", "!3b46a3ec"].includes(envelope.gatewayId),
         );
+
+        // date, messageId, fromId, rxSnrA, rxRssiA, rxSnrB, rxRssiB
+        if (
+          true ||
+          nodeId2hex(packet.from) === "3b46b95c"
+          // &&
+          // gateways.includes("a20afddc") &&
+          // gateways.includes("3b46a3ec")
+        ) {
+          let logString =
+            "logtype, date, messageId, portNum, from, rxSnrA, rxSnrB, rxRssiA, rxRssiB\n";
+
+          const gatewayAid = "!3b46a3ec";
+          const gatewayBid = "!a20afddc";
+
+          // console.log(foo);
+
+          const envA = foo.find(
+            (envelope) => envelope.gatewayId === gatewayAid,
+          );
+          const envB = foo.find(
+            (envelope) => envelope.gatewayId === gatewayBid,
+          );
+
+          // console.log(envA);
+          // console.log(envB);
+
+          logString += `logtype_ab, ${new Date().getTime()}, ${packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${envA ? envA.packet.rxSnr : "-"}, ${envB ? envB.packet.rxSnr : "-"}, ${envA ? envA.packet.rxRssi : "-"}, ${envB ? envB.packet.rxRssi : "-"}`;
+
+          // foo.forEach((env) => {
+          //   logString += `logtype_skippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnrA}, ${env.packet.rxRssiA}, ${env.packet.rxSnrB}, ${env.packet.rxRssiB}\n`;
+          // });
+          logger.info(logString.trim());
+        }
+
         // console.log(foo);
         let logString =
           "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
