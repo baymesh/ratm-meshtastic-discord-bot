@@ -369,6 +369,13 @@ const createDiscordMessage = async (packetGroup, text) => {
         "https://cdn.discordapp.com/guilds/1215705285159817236/users/80892297905963008/avatars/4c7c3358112c236b1ed96c45d005d4b4.webp";
     }
 
+    const maxHopStart = packetGroup.serviceEnvelopes.reduce((acc, se) => {
+      const hopStart = se.packet.hopStart;
+      return hopStart > acc ? hopStart : acc;
+    }, 0);
+
+    console.log("maxHopStart", maxHopStart);
+
     const content = {
       username: "Mesh Bot",
       avatar_url:
@@ -435,10 +442,19 @@ const createDiscordMessage = async (packetGroup, text) => {
                   envelope.packet.hopLimit === 0
                 ) {
                   hopText = `${envelope.packet.rxSnr} / ${envelope.packet.rxRssi} dBm`;
+                } else if (
+                  envelope.packet.hopStart - envelope.packet.hopLimit ===
+                  0
+                ) {
+                  hopText = `${envelope.packet.rxSnr} / ${envelope.packet.rxRssi} dBm ${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops`;
                 }
 
                 if (envelope.gatewayId.replace("!", "") === nodeIdHex) {
-                  hopText = "Self Gated";
+                  hopText = `Self Gated ${envelope.packet.hopStart} hopper`;
+                }
+
+                if (maxHopStart !== envelope.packet.hopStart) {
+                  hopText = `:older_man: : ${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops`;
                 }
 
                 return {
