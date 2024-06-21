@@ -374,7 +374,7 @@ const createDiscordMessage = async (packetGroup, text) => {
       return hopStart > acc ? hopStart : acc;
     }, 0);
 
-    console.log("maxHopStart", maxHopStart);
+    // console.log("maxHopStart", maxHopStart);
 
     const content = {
       username: "Mesh Bot",
@@ -454,7 +454,7 @@ const createDiscordMessage = async (packetGroup, text) => {
                 }
 
                 if (maxHopStart !== envelope.packet.hopStart) {
-                  hopText = `:older_man: : ${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops`;
+                  hopText = `:older_man: ${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops`;
                 }
 
                 return {
