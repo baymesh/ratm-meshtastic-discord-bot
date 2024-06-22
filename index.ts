@@ -382,13 +382,13 @@ const createDiscordMessage = async (packetGroup, text) => {
         "https://cdn.discordapp.com/app-icons/1240017058046152845/295e77bec5f9a44f7311cf8723e9c332.png",
       embeds: [
         {
-          url: `https://data.bayme.sh/nodeInfo?id=${nodeIdHex}`,
+          url: `https://app.bayme.sh/node/${nodeIdHex}`,
           color: 6810260,
           timestamp: new Date(packet.rxTime * 1000).toISOString(),
 
           author: {
             name: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].longName : "Unknown"}`,
-            url: `https://data.bayme.sh/nodeInfo?id=${nodeIdHex}`,
+            url: `https://app.bayme.sh/node/${nodeIdHex}`,
             icon_url: avatarUrl,
           },
           title: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].shortName : "UNK"}`,
@@ -459,7 +459,7 @@ const createDiscordMessage = async (packetGroup, text) => {
 
                 return {
                   name: `Gateway`,
-                  value: `[${gatewayDisplaName} (${hopText})](https://data.bayme.sh/nodeInfo?id=${envelope.gatewayId.replace("!", "")})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
+                  value: `[${gatewayDisplaName} (${hopText})](https://app.bayme.sh/node/${envelope.gatewayId.replace("!", "")})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
                   inline: true,
                 };
               }),
