@@ -363,6 +363,11 @@ const createDiscordMessage = async (packetGroup, text) => {
       avatarUrl =
         "https://cdn.discordapp.com/avatars/988980779101077504/e4dee002c1ad0dc46a74adae96b6a52f.webp";
     }
+    if (["919de5b8", "b58149bf", "6d00f72c", "bff844f3"].includes(nodeIdHex)) {
+      // ko6cnt
+      avatarUrl =
+        "https://cdn.discordapp.com/avatars/556326115837345826/46eea31efdaa527deb4664bc5e5d9eab.webp";
+    }
     if (["7c5a3f88", "efb87a8", "da659714", "0c18fe8c"].includes(nodeIdHex)) {
       // ktsn
       avatarUrl =
