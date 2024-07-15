@@ -89,7 +89,6 @@ const updateNodeDB = (
     nodeDB[node] = longName;
     if (process.env.REDIS_ENABLED === "true") {
       redisClient.set(`baymesh:node:${node}`, longName);
-      // {"id":"!22d6db03","longName":"Taylor Mountain W4","shortName":"SRW4","macaddr":"05Ei1tsD","hwModel":"RAK4631","role":"ROUTER_CLIENT"}
       const nodeInfoGenericObj = JSON.parse(JSON.stringify(nodeInfo));
       // remove leading "!" from id
       nodeInfoGenericObj.id = nodeInfoGenericObj.id.replace("!", "");
@@ -152,7 +151,7 @@ const getNodeInfos = async (nodeIds: string[], debug: boolean) => {
       "$",
     );
     if (debug) {
-      console.log("DEBUGGGG", nodeInfos);
+      logger.debug(JSON.stringify(nodeInfos));
     }
 
     const formattedNodeInfos = nodeInfos.flat().reduce((acc, item) => {
@@ -249,17 +248,6 @@ function sendDiscordMessage(webhookUrl: string, payload: any) {
     });
 }
 
-// Object.keys(nodeDB).forEach((nodeId) => {
-//   if (process.env.REDIS_ENABLED === "true") {
-//     const longName = nodeDB[nodeId];
-//     redisClient.exists(`baymesh:node:${nodeId}`).then((exists) => {
-//       if (!exists) {
-//         redisClient.set(`baymesh:node:${nodeId}`, longName);
-//       }
-//     });
-//   }
-// });
-
 function processTextMessage(packetGroup: PacketGroup) {
   const packet = packetGroup.serviceEnvelopes[0].packet;
   const text = packet.decoded.payload.toString();
@@ -321,27 +309,6 @@ const createDiscordMessage = async (packetGroup, text) => {
         .concat(from),
       false,
     );
-
-    // delete nodeInfos["fa989780"];
-
-    // console.log(
-    //   packetGroup.id,
-    //   packetGroup.serviceEnvelopes
-    //     .map((se) => se.gatewayId.replace("!", ""))
-    //     .concat(from),
-    //   nodeInfos,
-    // );
-
-    // if (Object.keys(nodeInfos).length === 0) {
-    //   console.log("BeepBeep", nodeInfos);
-    //   nodeInfos = await getNodeInfos(
-    //     packetGroup.serviceEnvelopes
-    //       .map((se) => se.gatewayId.replace("!", ""))
-    //       .concat(from),
-    //     true,
-    //   );
-    //   console.log("HonkHonk", nodeInfos);
-    // }
 
     let avatarUrl = "https://cdn.discordapp.com/embed/avatars/0.png";
     if (["3b46b95c", "75f1804c", "fa6dc348"].includes(nodeIdHex)) {
@@ -578,27 +545,6 @@ const nodes_to_log_all_positions = [
   "33686ed8", // balloon
 ];
 
-const topics_old = [
-  "msh/US/bayarea",
-  "msh/US/BayArea",
-  "msh/US/CA/bayarea",
-  "msh/US/CA/BayArea",
-  "msh/US/sacvalley",
-  "msh/US/SacValley",
-  "msh/US/CA/sacvalley",
-  "msh/US/CA/SacValley",
-  "msh/US/CA/CenValMesh",
-  "msh/US/CA/cenvalmesh",
-  "msh/US/CA/centralvalley",
-  "msh/US/CA/CentralValley",
-  "msh/US/CenValMesh",
-  "msh/US/cenvalmesh",
-  "msh/US/centralvalley",
-  "msh/US/CentralValley",
-  "msh/US/CA/SantaCruz",
-  "msh/US/CA/MRY",
-];
-
 const subbed_topics = ["msh/US"];
 
 // run every 5 seconds and pop off from the queue
@@ -732,56 +678,6 @@ function shaHash(serviceEnvelope: ServiceEnvelope) {
 function processPacketGroup(packetGroup: PacketGroup) {
   const packet = packetGroup.serviceEnvelopes[0].packet;
   const portnum = packet?.decoded?.portnum;
-
-  // ${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart
-
-  // if all packets in packetGroup.serviceEnvelopes have hopStart of zero and hopLimit of zero
-  if (
-    packetGroup.serviceEnvelopes.every(
-      (envelope) => envelope.packet.hopStart === 0,
-    ) &&
-    packetGroup.serviceEnvelopes.every(
-      (envelope) => envelope.packet.hopLimit === 0,
-    )
-  ) {
-    const gateways = Array.from(
-      new Set(
-        packetGroup.serviceEnvelopes.map((envelope) =>
-          envelope.gatewayId.replace("!", ""),
-        ),
-      ),
-    );
-    // console.log(gateways);
-    // my gateways
-
-    getNodeInfos([
-      "a20afe2c",
-      "3b46b95c",
-      "75f1804c",
-      "a20afddc",
-      "3b46a3ec",
-    ]).then((nodeInfos) => {
-      // console.log(nodeInfos);
-      nodeInfos["a20afe2c"] = { shortName: "GUNT" };
-      if (
-        gateways.includes("a20afe2c") || // New OHR formerly GUNT
-        //gateways.includes("3b46b95c") || // OHR
-        gateways.includes("75f1804c") // NOHR
-      ) {
-        // print SNR/RSSI for any of the three gateways
-        const foo = packetGroup.serviceEnvelopes.filter((envelope) =>
-          ["!a20afe2c", "!75f1804c"].includes(envelope.gatewayId),
-        );
-        // console.log(foo);
-        let logString =
-          "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
-        foo.forEach((env) => {
-          logString += `logtype_skippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
-        });
-        logger.info(logString.trim());
-      }
-    });
-  }
 
   if (portnum === 1) {
     processTextMessage(packetGroup);
