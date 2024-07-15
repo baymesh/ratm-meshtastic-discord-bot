@@ -764,67 +764,19 @@ function processPacketGroup(packetGroup: PacketGroup) {
       // console.log(nodeInfos);
       nodeInfos["a20afe2c"] = { shortName: "GUNT" };
       if (
-        gateways.includes("a20afe2c") || // GUNT
-        gateways.includes("3b46b95c") || // OHR
+        gateways.includes("a20afe2c") || // New OHR formerly GUNT
+        //gateways.includes("3b46b95c") || // OHR
         gateways.includes("75f1804c") // NOHR
       ) {
         // print SNR/RSSI for any of the three gateways
         const foo = packetGroup.serviceEnvelopes.filter((envelope) =>
-          ["!a20afe2c", "!3b46b95c", "!75f1804c"].includes(envelope.gatewayId),
+          ["!a20afe2c", "!75f1804c"].includes(envelope.gatewayId),
         );
         // console.log(foo);
         let logString =
           "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
         foo.forEach((env) => {
           logString += `logtype_skippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
-        });
-        logger.info(logString.trim());
-      }
-      // cake's gateways
-      if (gateways.includes("a20afddc") || gateways.includes("3b46a3ec")) {
-        const foo = packetGroup.serviceEnvelopes.filter((envelope) =>
-          ["!a20afddc", "!3b46a3ec"].includes(envelope.gatewayId),
-        );
-
-        // date, messageId, fromId, rxSnrA, rxRssiA, rxSnrB, rxRssiB
-        if (
-          true ||
-          nodeId2hex(packet.from) === "3b46b95c"
-          // &&
-          // gateways.includes("a20afddc") &&
-          // gateways.includes("3b46a3ec")
-        ) {
-          let logString =
-            "logtype, date, messageId, portNum, from, rxSnrA, rxSnrB, rxRssiA, rxRssiB\n";
-
-          const gatewayAid = "!3b46a3ec";
-          const gatewayBid = "!a20afddc";
-
-          // console.log(foo);
-
-          const envA = foo.find(
-            (envelope) => envelope.gatewayId === gatewayAid,
-          );
-          const envB = foo.find(
-            (envelope) => envelope.gatewayId === gatewayBid,
-          );
-
-          // console.log(envA);
-          // console.log(envB);
-
-          logString += `logtype_ab, ${new Date().getTime()}, ${packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${envA ? envA.packet.rxSnr : "-"}, ${envB ? envB.packet.rxSnr : "-"}, ${envA ? envA.packet.rxRssi : "-"}, ${envB ? envB.packet.rxRssi : "-"}`;
-
-          // foo.forEach((env) => {
-          //   logString += `logtype_skippy, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnrA}, ${env.packet.rxRssiA}, ${env.packet.rxSnrB}, ${env.packet.rxRssiB}\n`;
-          // });
-          logger.info(logString.trim());
-        }
-
-        // console.log(foo);
-        let logString =
-          "logtype, messageId, portNum, from, gatewayId, gatewayShortName, rxSnr, rxRssi\n";
-        foo.forEach((env) => {
-          logString += `logtype_cakey, ${env.packet.id}, ${portnum}, ${nodeId2hex(packet.from)}, ${env.gatewayId.replace("!", "")}, ${nodeInfos[env.gatewayId.replace("!", "")].shortName}, ${env.packet.rxSnr}, ${env.packet.rxRssi}\n`;
         });
         logger.info(logString.trim());
       }
