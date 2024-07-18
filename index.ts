@@ -431,7 +431,7 @@ const createDiscordMessage = async (packetGroup, text) => {
                 }
 
                 if (envelope.mqttServer === "public") {
-                  hopText = ":poop:";
+                  hopText = `:poop: ${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops`;
                 }
 
                 return {
