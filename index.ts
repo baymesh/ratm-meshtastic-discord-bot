@@ -540,7 +540,6 @@ const ba_home_topics = [
   "msh/US/BayArea",
   "msh/US/CA/bayarea",
   "msh/US/CA/BayArea",
-  "msh/US/mqtt-bayme-sh",
 ];
 
 const sv_home_topics = [
