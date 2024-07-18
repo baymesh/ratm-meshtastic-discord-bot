@@ -52,6 +52,7 @@ Sentry.setTag("instance_id", INSTANCE_ID);
 logger.info(`Starting Rage Against Mesh(ine) ${INSTANCE_ID}`);
 
 const mqttBrokerUrl = "mqtt://mqtt.meshtastic.org";
+const basymeshMqttBrokerUrl = "mqtt://mqtt.bayme.sh";
 const mqttUsername = "meshdev";
 const mqttPassword = "large4cats";
 
@@ -311,7 +312,7 @@ const createDiscordMessage = async (packetGroup, text) => {
     );
 
     let avatarUrl = "https://cdn.discordapp.com/embed/avatars/0.png";
-    if (["3b46b95c", "75f1804c", "fa6dc348"].includes(nodeIdHex)) {
+    if (["3b46b95c", "75f1804c", "fa6dc348", "a20afe2c"].includes(nodeIdHex)) {
       avatarUrl =
         "https://cdn.discordapp.com/avatars/206296059796783104/b3c5c970fe355e9c01786dbe6749db1a.webp";
     }
@@ -429,6 +430,10 @@ const createDiscordMessage = async (packetGroup, text) => {
                   hopText = `:older_man: ${envelope.packet.hopStart - envelope.packet.hopLimit}/${envelope.packet.hopStart} hops`;
                 }
 
+                if (envelope.mqttServer === "public") {
+                  hopText = ":poop:";
+                }
+
                 return {
                   name: `Gateway`,
                   value: `[${gatewayDisplaName} (${hopText})](https://app.bayme.sh/node/${envelope.gatewayId.replace("!", "")})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
@@ -521,6 +526,11 @@ const client = mqtt.connect(mqttBrokerUrl, {
   password: mqttPassword,
 });
 
+const baymesh_client = mqtt.connect(basymeshMqttBrokerUrl, {
+  username: mqttUsername,
+  password: mqttPassword,
+});
+
 const ba_home_topics = [
   "msh/US/bayarea",
   "msh/US/BayArea",
@@ -557,6 +567,7 @@ const processing_timer = setInterval(() => {
         );
         clearInterval(processing_timer); // do we want to kill it so fast? what about things in the queue?
         subbed_topics.forEach((topic) => client.unsubscribe(topic));
+        subbed_topics.forEach((topic) => baymesh_client.unsubscribe(topic));
       }
     });
   }
@@ -568,8 +579,8 @@ const processing_timer = setInterval(() => {
   });
 }, 5000);
 
-function sub(topic: string) {
-  client.subscribe(`${topic}/#`, (err) => {
+function sub(the_client: mqtt.MqttClient, topic: string) {
+  the_client.subscribe(`${topic}/#`, (err) => {
     if (!err) {
       logger.info(`Subscribed to ${topic}/#`);
     } else {
@@ -581,11 +592,105 @@ function sub(topic: string) {
 // subscribe to everything when connected
 client.on("connect", () => {
   logger.info(`Connected to MQTT broker`);
-  subbed_topics.forEach((topic) => sub(topic));
+  subbed_topics.forEach((topic) => sub(client, topic));
+});
+
+// subscribe to everything when connected
+baymesh_client.on("connect", () => {
+  logger.info(`Connected to Private MQTT broker`);
+  subbed_topics.forEach((topic) => sub(baymesh_client, topic));
 });
 
 // handle message received
 client.on("message", async (topic: string, message: any) => {
+  try {
+    if (topic.includes("msh")) {
+      if (!topic.includes("/json")) {
+        if (topic.includes("/stat/")) {
+          return;
+        }
+        if (topic.includes("mqtt-bayme-sh")) {
+          return;
+        }
+        // decode service envelope
+        let envelope;
+        try {
+          envelope = ServiceEnvelope.decode(message);
+        } catch (envDecodeErr) {
+          if (
+            String(envDecodeErr).indexOf("invalid wire type 7 at offset 1") ===
+            -1
+          ) {
+            logger.error(
+              `MessageId: Error decoding service envelope: ${envDecodeErr}`,
+            );
+          }
+          return;
+        }
+        if (!envelope || !envelope.packet) {
+          return;
+        }
+
+        if (
+          home_topics.some((home_topic) => topic.startsWith(home_topic)) ||
+          nodes_to_log_all_positions.includes(
+            nodeId2hex(envelope.packet.from),
+          ) ||
+          meshPacketQueue.exists(envelope.packet.id)
+        ) {
+          // return;
+        } else {
+          // logger.info("Message received on topic: " + topic);
+          return;
+        }
+
+        // attempt to decrypt encrypted packets
+        const isEncrypted = envelope.packet.encrypted?.length > 0;
+        if (isEncrypted) {
+          const decoded = decrypt(envelope.packet);
+          if (decoded) {
+            envelope.packet.decoded = decoded;
+          }
+        }
+
+        if (process.env.REDIS_ENABLED === "true") {
+          const redisKey = `baymesh:envelope:${nodeId2hex(envelope.packet.id)}:${nodeId2hex(envelope.gatewayId.replace("!", ""))}:${nodeId2hex(envelope.packet.from)}`;
+          const seenBefore = await redisClient.exists(redisKey);
+          if (seenBefore) {
+            // logger.debug(
+            //   `RedisCache: Already received envelope with baymesh:envelope:${nodeId2hex(envelope.packet.id)}:${nodeId2hex(envelope.gatewayId.replace("!", ""))}:${nodeId2hex(envelope.packet.from)}`,
+            // );
+            return;
+          }
+
+          //logger.debug(`setting ${redisKey}`);
+
+          redisClient.set(redisKey, 1);
+        } else {
+          if (cache.exists(shaHash(envelope))) {
+            // logger.debug(
+            //   `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
+            // );
+            return;
+          }
+
+          if (cache.add(shaHash(envelope))) {
+            // periodically print the nodeDB to the console
+            //console.log(JSON.stringify(nodeDB));
+          }
+        }
+
+        meshPacketQueue.add(envelope, topic, "public");
+      }
+    }
+  } catch (err) {
+    logger.error("Error: " + String(err));
+    Sentry.captureException(err);
+  }
+});
+
+// handle message received
+baymesh_client.on("message", async (topic: string, message: any) => {
   try {
     if (topic.includes("msh")) {
       if (!topic.includes("/json")) {
@@ -660,7 +765,7 @@ client.on("message", async (topic: string, message: any) => {
           }
         }
 
-        meshPacketQueue.add(envelope, topic);
+        meshPacketQueue.add(envelope, topic, "baymesh");
       }
     }
   } catch (err) {
