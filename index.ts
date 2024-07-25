@@ -385,6 +385,11 @@ const createDiscordMessage = async (packetGroup, text) => {
               value: `[${packetGroup.id.toString(16)}](https://meshview.armooo.net/packet/${packetGroup.id})`,
               inline: true,
             },
+            {
+              name: "Channel",
+              value: `${packetGroup.serviceEnvelopes[0].channelId}`,
+              inline: true,
+            },
             ...packetGroup.serviceEnvelopes
               .filter(
                 (value, index, self) =>
