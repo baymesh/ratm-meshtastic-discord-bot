@@ -11,5 +11,5 @@ requiredFiles = [".replit", "replit.nix", ".config"]
 
 [deployment]
 run = ["tsx", "index.ts"]
-deploymentTarget = "cloudrun"
-ignorePorts = false
+deploymentTarget = "gce"
+ignorePorts = true

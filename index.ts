@@ -1,7 +1,6 @@
 import crypto from "crypto";
 import path from "path";
 import mqtt from "mqtt";
-import postgres from "postgres";
 import protobufjs from "protobufjs";
 import fs from "fs";
 import axios from "axios";
@@ -51,12 +50,20 @@ Sentry.setTag("instance_id", INSTANCE_ID);
 
 logger.info(`Starting Rage Against Mesh(ine) ${INSTANCE_ID}`);
 
-const mqttBrokerUrl = "mqtt://mqtt.meshtastic.org";
+let pfpDb = { default: "https://cdn.discordapp.com/embed/avatars/0.png" };
+
+if (process.env.PFP_JSON_URL) {
+  logger.info(`Using PFP_JSON_URL=${process.env.PFP_JSON_URL}`);
+  axios.get(process.env.PFP_JSON_URL).then((response) => {
+    pfpDb = response.data;
+    logger.info(`Loaded ${Object.keys(pfpDb).length} pfp entries`);
+  });
+}
+
+const mqttBrokerUrl = "mqtt://mqtt.meshtastic.org"; // the original project took a nose dive, so this server is trash
 const basymeshMqttBrokerUrl = "mqtt://mqtt.bayme.sh";
 const mqttUsername = "meshdev";
 const mqttPassword = "large4cats";
-
-const sql = postgres(process.env.DATABASE_URL, {});
 
 const redisClient = createClient({
   url: process.env.REDIS_URL,
@@ -311,39 +318,9 @@ const createDiscordMessage = async (packetGroup, text) => {
       false,
     );
 
-    let avatarUrl = "https://cdn.discordapp.com/embed/avatars/0.png";
-    if (["3b46b95c", "75f1804c", "fa6dc348", "a20afe2c"].includes(nodeIdHex)) {
-      avatarUrl =
-        "https://cdn.discordapp.com/avatars/206296059796783104/b3c5c970fe355e9c01786dbe6749db1a.webp";
-    }
-    if (["57865c0a"].includes(nodeIdHex)) {
-      // anon
-      avatarUrl =
-        "https://cdn.discordapp.com/avatars/258714316314771456/1f0810a4c9bf346e3a50129db1376003.webp";
-    }
-    if (["3c228feb"].includes(nodeIdHex)) {
-      // jb actual
-      avatarUrl =
-        "https://cdn.discordapp.com/avatars/1199587003965128735/99150ce39078993dc47d989bd91eda87.webp";
-    }
-    if (["3b46a41c", "fabae8ec"].includes(nodeIdHex)) {
-      // fnnc
-      avatarUrl =
-        "https://cdn.discordapp.com/avatars/988980779101077504/e4dee002c1ad0dc46a74adae96b6a52f.webp";
-    }
-    if (
-      ["919de5b8", "b58149bf", "6d00f72c", "bff844f3", "f53f441f"].includes(
-        nodeIdHex,
-      )
-    ) {
-      // ko6cnt
-      avatarUrl =
-        "https://cdn.discordapp.com/avatars/556326115837345826/46eea31efdaa527deb4664bc5e5d9eab.webp";
-    }
-    if (["7c5a3f88", "efb87a8", "da659714", "0c18fe8c"].includes(nodeIdHex)) {
-      // ktsn
-      avatarUrl =
-        "https://cdn.discordapp.com/guilds/1215705285159817236/users/80892297905963008/avatars/4c7c3358112c236b1ed96c45d005d4b4.webp";
+    let avatarUrl = pfpDb["default"];
+    if (Object.hasOwn(pfpDb, nodeIdHex)) {
+      avatarUrl = pfpDb[nodeIdHex];
     }
 
     const maxHopStart = packetGroup.serviceEnvelopes.reduce((acc, se) => {
@@ -487,53 +464,10 @@ const createDiscordMessage = async (packetGroup, text) => {
   }
 };
 
-async function insertMeshPositionReport(packetGroup: PacketGroup) {
-  Sentry.withScope(async (scope) => {
-    scope.setTag("packet_id", packetGroup.id);
-    scope.setTag("packet_count", packetGroup.serviceEnvelopes.length);
-    const packet = packetGroup.serviceEnvelopes[0].packet;
-    const from = packet.from;
-    scope.setTag("packet_from", from);
-    const position = Position.decode(
-      packetGroup.serviceEnvelopes[0].packet.decoded.payload,
-    );
-
-    const latitude = position.latitudeI / 10000000;
-    const longitude = position.longitudeI / 10000000;
-    const altitude = position.altitude;
-
-    const topics = Array.from(
-      new Set(
-        packetGroup.serviceEnvelopes.map((envelope) =>
-          envelope.topic.slice(0, envelope.topic.indexOf("/!")),
-        ),
-      ),
-    );
-
-    const gateways = packetGroup.serviceEnvelopes.map((envelope) =>
-      envelope.gatewayId.replace("!", ""),
-    );
-
-    try {
-      return await sql`
-        INSERT INTO mesh_position_reports
-        ("from", "from_hex", latitude, longitude, altitude, topics, gateways)
-        values
-          (${from}, ${nodeId2hex(from)}, ${latitude}, ${longitude}, ${altitude}, ${topics}, ${gateways})
-      `;
-    } catch (error) {
-      logger.error(
-        `MessageId: ${packetGroup.id} Error inserting mesh position report: ${error}`,
-      );
-    }
-  });
-  return null;
-}
-
-const client = mqtt.connect(mqttBrokerUrl, {
-  username: mqttUsername,
-  password: mqttPassword,
-});
+// const client = mqtt.connect(mqttBrokerUrl, {
+//   username: mqttUsername,
+//   password: mqttPassword,
+// });
 
 const baymesh_client = mqtt.connect(basymeshMqttBrokerUrl, {
   username: mqttUsername,
@@ -574,7 +508,7 @@ const processing_timer = setInterval(() => {
           `Stopping RATM instance; active_instance: ${active_instance} this instance: ${INSTANCE_ID}`,
         );
         clearInterval(processing_timer); // do we want to kill it so fast? what about things in the queue?
-        subbed_topics.forEach((topic) => client.unsubscribe(topic));
+        // subbed_topics.forEach((topic) => client.unsubscribe(topic));
         subbed_topics.forEach((topic) => baymesh_client.unsubscribe(topic));
       }
     });
@@ -598,103 +532,9 @@ function sub(the_client: mqtt.MqttClient, topic: string) {
 }
 
 // subscribe to everything when connected
-client.on("connect", () => {
-  logger.info(`Connected to MQTT broker`);
-  subbed_topics.forEach((topic) => sub(client, topic));
-});
-
-// subscribe to everything when connected
 baymesh_client.on("connect", () => {
   logger.info(`Connected to Private MQTT broker`);
   subbed_topics.forEach((topic) => sub(baymesh_client, topic));
-});
-
-// handle message received
-client.on("message", async (topic: string, message: any) => {
-  try {
-    if (topic.includes("msh")) {
-      if (!topic.includes("/json")) {
-        if (topic.includes("/stat/")) {
-          return;
-        }
-        if (topic.includes("mqtt-bayme-sh")) {
-          return;
-        }
-        // decode service envelope
-        let envelope;
-        try {
-          envelope = ServiceEnvelope.decode(message);
-        } catch (envDecodeErr) {
-          if (
-            String(envDecodeErr).indexOf("invalid wire type 7 at offset 1") ===
-            -1
-          ) {
-            logger.error(
-              `MessageId: Error decoding service envelope: ${envDecodeErr}`,
-            );
-          }
-          return;
-        }
-        if (!envelope || !envelope.packet) {
-          return;
-        }
-
-        if (
-          home_topics.some((home_topic) => topic.startsWith(home_topic)) ||
-          nodes_to_log_all_positions.includes(
-            nodeId2hex(envelope.packet.from),
-          ) ||
-          meshPacketQueue.exists(envelope.packet.id)
-        ) {
-          // return;
-        } else {
-          // logger.info("Message received on topic: " + topic);
-          return;
-        }
-
-        // attempt to decrypt encrypted packets
-        const isEncrypted = envelope.packet.encrypted?.length > 0;
-        if (isEncrypted) {
-          const decoded = decrypt(envelope.packet);
-          if (decoded) {
-            envelope.packet.decoded = decoded;
-          }
-        }
-
-        if (process.env.REDIS_ENABLED === "true") {
-          const redisKey = `baymesh:envelope:${nodeId2hex(envelope.packet.id)}:${nodeId2hex(envelope.gatewayId.replace("!", ""))}:${nodeId2hex(envelope.packet.from)}`;
-          const seenBefore = await redisClient.exists(redisKey);
-          if (seenBefore) {
-            // logger.debug(
-            //   `RedisCache: Already received envelope with baymesh:envelope:${nodeId2hex(envelope.packet.id)}:${nodeId2hex(envelope.gatewayId.replace("!", ""))}:${nodeId2hex(envelope.packet.from)}`,
-            // );
-            return;
-          }
-
-          //logger.debug(`setting ${redisKey}`);
-
-          redisClient.set(redisKey, 1);
-        } else {
-          if (cache.exists(shaHash(envelope))) {
-            // logger.debug(
-            //   `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
-            // );
-            return;
-          }
-
-          if (cache.add(shaHash(envelope))) {
-            // periodically print the nodeDB to the console
-            //console.log(JSON.stringify(nodeDB));
-          }
-        }
-
-        meshPacketQueue.add(envelope, topic, "public");
-      }
-    }
-  } catch (err) {
-    logger.error("Error: " + String(err));
-    Sentry.captureException(err);
-  }
 });
 
 // handle message received
@@ -795,9 +635,7 @@ function processPacketGroup(packetGroup: PacketGroup) {
   if (portnum === 1) {
     processTextMessage(packetGroup);
   } else if (portnum === 3) {
-    if (process.env.DB_INSERTS_ENABLED === "true") {
-      insertMeshPositionReport(packetGroup);
-    }
+    // we used to insert positions in to the postresdb, but no more this is a just a logger
   } else if (portnum === 4) {
     const user = User.decode(packet.decoded.payload);
     const from = nodeId2hex(packet.from);
