@@ -1,6 +1,8 @@
 # Rage Against The Mesh(ine)
 a discord bot for meshtastic
 
+Most of the bot logic is in https://github.com/baymesh/ratm-meshtastic-discord-bot/blob/main/index.ts
+
 There is a Dockerfile, you can deploy this anywhere that you can run docker containers?
 
 Or you can set the environment variables and run `tsx index.js`
