@@ -211,6 +211,10 @@ const nodeId2hex = (nodeId: string | number) => {
     : nodeId;
 };
 
+const nodeHex2id = (nodeHex: string) => {
+  return parseInt(nodeHex, 16);
+};
+
 const prettyNodeName = (nodeId: string | number) => {
   const nodeIdHex = nodeId2hex(nodeId);
   const nodeName = getNodeName(nodeId);
@@ -336,13 +340,13 @@ const createDiscordMessage = async (packetGroup, text) => {
         "https://cdn.discordapp.com/app-icons/1240017058046152845/295e77bec5f9a44f7311cf8723e9c332.png",
       embeds: [
         {
-          url: `https://app.bayme.sh/node/${nodeIdHex}`,
+          url: `https://meshview.armooo.net/packet_list/${packet.from}`,
           color: 6810260,
           timestamp: new Date(packet.rxTime * 1000).toISOString(),
 
           author: {
             name: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].longName : "Unknown"}`,
-            url: `https://app.bayme.sh/node/${nodeIdHex}`,
+            url: `https://meshview.armooo.net/packet_list/${packet.from}`,
             icon_url: avatarUrl,
           },
           title: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].shortName : "UNK"}`,
@@ -422,7 +426,7 @@ const createDiscordMessage = async (packetGroup, text) => {
 
                 return {
                   name: `Gateway`,
-                  value: `[${gatewayDisplaName} (${hopText})](https://app.bayme.sh/node/${envelope.gatewayId.replace("!", "")})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
+                  value: `[${gatewayDisplaName} (${hopText})](https://meshview.armooo.net/packet_list/${nodeHex2id(envelope.gatewayId.replace("!", ""))})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
                   inline: true,
                 };
               }),
