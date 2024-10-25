@@ -240,6 +240,7 @@ if (!process.env.DISCORD_WEBHOOK_URL) {
 }
 
 const baWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
+const baMsWebhookUrl = process.env.DISCORD_MS_WEBOOK_URL;
 const svWebhookUrl = process.env.SV_DISCORD_WEBHOOK_URL;
 
 const mesh_topic = process.env.MQTT_TOPIC || "msh/US/bayarea";
@@ -340,13 +341,13 @@ const createDiscordMessage = async (packetGroup, text) => {
         "https://cdn.discordapp.com/app-icons/1240017058046152845/295e77bec5f9a44f7311cf8723e9c332.png",
       embeds: [
         {
-          url: `https://meshview.armooo.net/packet_list/${packet.from}`,
+          url: `https://meshview.rouvier.org/packet_list/${packet.from}`,
           color: 6810260,
           timestamp: new Date(packet.rxTime * 1000).toISOString(),
 
           author: {
             name: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].longName : "Unknown"}`,
-            url: `https://meshview.armooo.net/packet_list/${packet.from}`,
+            url: `https://meshview.rouvier.org/packet_list/${packet.from}`,
             icon_url: avatarUrl,
           },
           title: `${nodeInfos[nodeIdHex] ? nodeInfos[nodeIdHex].shortName : "UNK"}`,
@@ -363,7 +364,7 @@ const createDiscordMessage = async (packetGroup, text) => {
             // },
             {
               name: "Packet",
-              value: `[${packetGroup.id.toString(16)}](https://meshview.armooo.net/packet/${packetGroup.id})`,
+              value: `[${packetGroup.id.toString(16)}](https://meshview.rouvier.org/packet/${packetGroup.id})`,
               inline: true,
             },
             {
@@ -426,7 +427,7 @@ const createDiscordMessage = async (packetGroup, text) => {
 
                 return {
                   name: `Gateway`,
-                  value: `[${gatewayDisplaName} (${hopText})](https://meshview.armooo.net/packet_list/${nodeHex2id(envelope.gatewayId.replace("!", ""))})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
+                  value: `[${gatewayDisplaName} (${hopText})](https://meshview.rouvier.org/packet_list/${nodeHex2id(envelope.gatewayId.replace("!", ""))})${gatewayDelay > 0 ? " (" + gatewayDelay + "ms)" : ""}`,
                   inline: true,
                 };
               }),
@@ -448,7 +449,11 @@ const createDiscordMessage = async (packetGroup, text) => {
         ),
       ).length > 0
     ) {
-      sendDiscordMessage(baWebhookUrl, content);
+      if (baMsWebhookUrl && packetGroup.serviceEnvelopes[0].channelId === "MediumSlow") {
+        sendDiscordMessage(baMsWebhookUrl, content);
+      } else {
+        sendDiscordMessage(baWebhookUrl, content);
+      }
     }
 
     if (
@@ -590,31 +595,16 @@ baymesh_client.on("message", async (topic: string, message: any) => {
           }
         }
 
-        if (process.env.REDIS_ENABLED === "true") {
-          const redisKey = `baymesh:envelope:${nodeId2hex(envelope.packet.id)}:${nodeId2hex(envelope.gatewayId.replace("!", ""))}:${nodeId2hex(envelope.packet.from)}`;
-          const seenBefore = await redisClient.exists(redisKey);
-          if (seenBefore) {
-            // logger.debug(
-            //   `RedisCache: Already received envelope with baymesh:envelope:${nodeId2hex(envelope.packet.id)}:${nodeId2hex(envelope.gatewayId.replace("!", ""))}:${nodeId2hex(envelope.packet.from)}`,
-            // );
-            return;
-          }
+        if (cache.exists(shaHash(envelope))) {
+          // logger.debug(
+          //   `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
+          // );
+          return;
+        }
 
-          //logger.debug(`setting ${redisKey}`);
-
-          redisClient.set(redisKey, 1);
-        } else {
-          if (cache.exists(shaHash(envelope))) {
-            // logger.debug(
-            //   `FifoCache: Already received envelope with hash ${shaHash(envelope)} MessageId: ${envelope.packet.id}  Gateway: ${envelope.gatewayId}`,
-            // );
-            return;
-          }
-
-          if (cache.add(shaHash(envelope))) {
-            // periodically print the nodeDB to the console
-            //console.log(JSON.stringify(nodeDB));
-          }
+        if (cache.add(shaHash(envelope))) {
+          // periodically print the nodeDB to the console
+          //console.log(JSON.stringify(nodeDB));
         }
 
         meshPacketQueue.add(envelope, topic, "baymesh");
