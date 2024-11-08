@@ -60,6 +60,15 @@ if (process.env.PFP_JSON_URL) {
   });
 }
 
+let ignoreDB = JSON.parse(fs.readFileSync("./ignoreDB.json").toString());
+if (process.env.RBL_JSON_URL) {
+  logger.info(`Using RBL_JSON_URL=${process.env.RBL_JSON_URL}`);
+  axios.get(process.env.RBL_JSON_URL).then((response) => {
+    ignoreDB = response.data;
+    logger.info(`Loaded ${Object.keys(pfpDb).length} rbl entries`);
+  });
+}
+
 const mqttBrokerUrl = "mqtt://mqtt.meshtastic.org"; // the original project took a nose dive, so this server is trash
 const basymeshMqttBrokerUrl = "mqtt://mqtt.bayme.sh";
 const mqttUsername = "meshdev";
@@ -83,7 +92,6 @@ const decryptionKeys = [
 ];
 
 const nodeDB = JSON.parse(fs.readFileSync("./nodeDB.json").toString());
-const ignoreDB = JSON.parse(fs.readFileSync("./ignoreDB.json").toString());
 const cache = new FifoKeyCache();
 const meshPacketQueue = new MeshPacketQueue();
 
@@ -449,7 +457,10 @@ const createDiscordMessage = async (packetGroup, text) => {
         ),
       ).length > 0
     ) {
-      if (baMsWebhookUrl && packetGroup.serviceEnvelopes[0].channelId === "MediumSlow") {
+      if (
+        baMsWebhookUrl &&
+        packetGroup.serviceEnvelopes[0].channelId === "MediumSlow"
+      ) {
         sendDiscordMessage(baMsWebhookUrl, content);
       } else {
         sendDiscordMessage(baWebhookUrl, content);
