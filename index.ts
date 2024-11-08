@@ -65,7 +65,7 @@ if (process.env.RBL_JSON_URL) {
   logger.info(`Using RBL_JSON_URL=${process.env.RBL_JSON_URL}`);
   axios.get(process.env.RBL_JSON_URL).then((response) => {
     ignoreDB = response.data;
-    logger.info(`Loaded ${Object.keys(pfpDb).length} rbl entries`);
+    logger.info(`Loaded ${ignoreDB.length} rbl entries`);
   });
 }
 
